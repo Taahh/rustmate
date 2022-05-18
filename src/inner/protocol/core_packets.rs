@@ -1,9 +1,13 @@
+use tokio::net::UdpSocket;
 use crate::inner::protocol::Packet;
 use crate::networking::buffer::Buffer;
+use crate::user::User;
 
-pub struct HelloPacket;
+pub struct HelloPacket {
+    pub nonce: u16
+}
 pub struct AcknowledgePacket {
-    nonce: u16
+    pub nonce: u16
 }
 
 impl Packet for AcknowledgePacket {
@@ -15,9 +19,12 @@ impl Packet for AcknowledgePacket {
         todo!()
     }
 
-    fn serialize(&self, buffer: &mut Buffer) -> Buffer {
+    fn serialize(&self, buffer: &mut Buffer) {
+        todo!()
+    }
 
-        return buffer.clone();
+    fn process_packet(&self, socket: &UdpSocket, user: &User) {
+        todo!()
     }
 }
 
@@ -33,7 +40,11 @@ impl Packet for HelloPacket {
         println!("Username: {}", buffer.read_string());
     }
 
-    fn serialize(&self, buffer: &mut Buffer) -> Buffer {
+    fn serialize(&self, buffer: &mut Buffer) {
         todo!()
+    }
+
+    fn process_packet(&self, socket: &UdpSocket, user: &User) {
+        user.send_ack(socket, self.nonce);
     }
 }

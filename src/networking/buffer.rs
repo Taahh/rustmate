@@ -1,4 +1,4 @@
-use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 use crate::convert;
 
 pub struct Buffer {
@@ -74,6 +74,7 @@ impl Buffer {
 
     pub fn write_byte(&mut self, byte: u8) {
         self.byte_array.insert(self.position, byte);
+        println!("Wrote byte array at index {}, {:?}", self.position,self.byte_array);
         self.position += 1;
     }
 
@@ -86,6 +87,18 @@ impl Buffer {
 
     pub fn set_position(&mut self, position: usize) {
         self.position = position;
+    }
+
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    pub fn array(&self) -> Vec<u8> {
+        self.clone().byte_array
+    }
+
+    pub fn size(&self) -> usize {
+        self.byte_array.len()
     }
 
     pub fn clone(&self) -> Buffer {
