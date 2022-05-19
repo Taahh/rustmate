@@ -111,12 +111,12 @@ impl Buffer {
         return std::str::from_utf8(x).unwrap().to_string();
     }
 
-    pub fn read_packed_uint_32(&mut self) -> u8 {
+    pub fn read_packed_uint_32(&mut self) -> u32 {
         let mut read_more = true;
-        let mut output: u8 = 0;
+        let mut output: u32 = 0;
         let mut shift = 0;
         while read_more {
-            let mut byte: u8 = self.read_byte() as u8;
+            let mut byte: u32 = u32::from(self.read_byte());
             if byte >= 0x80 {
                 read_more = true;
                 byte ^= 0x80;
@@ -136,7 +136,7 @@ impl Buffer {
         byte != 0
     }
 
-    pub fn write_packed_uint_32(&mut self, int: u8) {
+    pub fn write_packed_uint_32(&mut self, int: u32) {
         let mut value = int;
         while value > 0 {
             let mut b = value & 0xFF;

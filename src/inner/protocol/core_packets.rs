@@ -105,6 +105,11 @@ impl Packet for HelloPacket {
         let mut client_version = buffer.read_int_32();
         println!("Version: {}", client_version);
         println!("Username: {}", buffer.read_string());
+        if buffer.position() < buffer.size() {
+            println!("Remaining Buffer: {:?}", buffer.array()[buffer.position()..]);
+            println!("Protocol Version: {}", buffer.read_byte());
+            println!("Mod Count: {}", buffer.read_packed_uint_32());
+        }
     }
 
     fn serialize(&self, buffer: &mut Buffer) {
