@@ -10,7 +10,7 @@ pub struct User {
 }
 
 impl User {
-    pub async fn send_packet<T: Packet>(&self, socket: &UdpSocket, nonce: Option<u16>, packet: T) {
+    pub fn send_packet<T: Packet>(&self, socket: &UdpSocket, nonce: Option<u16>, packet: T) {
         let buff: [u8; 2048] = [0; 2048];
         let mut buffer = Buffer::new(buff.to_vec());
         buffer.write_byte(packet.get_packet_id());

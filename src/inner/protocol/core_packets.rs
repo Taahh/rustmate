@@ -13,9 +13,32 @@ pub struct AcknowledgePacket {
     pub nonce: u16,
 }
 
+pub struct ReactorPacket;
+
 pub struct ReliablePacket {
     pub nonce: u16,
     pub hazel_msg: Option<HazelMessage>,
+}
+
+impl Packet for ReactorPacket {
+    fn get_packet_id(&self) -> u8 {
+        255
+    }
+
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+
+    }
+
+    fn serialize(&self, buffer: &mut Buffer) {
+        buffer.write_byte(0);
+        buffer.write_string("Rustmate".to_string());
+        buffer.write_string("0.0.1".to_string());
+        buffer.write_packed_uint_32(0 as u8);
+    }
+
+    fn process_packet(&self, socket: &UdpSocket, user: &User) {
+
+    }
 }
 
 impl Packet for ReliablePacket {
@@ -33,6 +56,7 @@ impl Packet for ReliablePacket {
 
     fn process_packet(&self, socket: &UdpSocket, user: &User) {
         user.send_ack(socket, self.nonce);
+        user.send_packet(socket, None, ReactorPacket {});
         let msg = self.hazel_msg.as_ref().unwrap();
         println!("Tag: {}", msg.tag());
         match msg.tag() {

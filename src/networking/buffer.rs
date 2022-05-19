@@ -1,5 +1,7 @@
+use std::borrow::BorrowMut;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::mem::transmute;
+use std::ops::Shl;
 
 #[derive(Debug, Clone)]
 pub struct Buffer {
@@ -109,7 +111,7 @@ impl Buffer {
         return std::str::from_utf8(x).unwrap().to_string();
     }
 
-    pub fn read_packed_uint_32(&mut self) -> i8 {
+    pub fn read_packed_uint_32(&mut self) -> u8 {
         let mut read_more = true;
         let mut output: u8 = 0;
         let mut shift = 0;
@@ -125,13 +127,25 @@ impl Buffer {
             output |= byte.checked_shl(shift).unwrap_or(0) as u8;
             shift += 7;
         }
-        return i8::try_from(output).expect("Unable to convert output to i8");
+        return /*i8::try_from(output).expect("Unable to convert output to i8")*/ output;
     }
 
     pub fn read_bool(&mut self) -> bool {
         let byte = self.read_byte();
         println!("Boolean: {}", byte);
         byte != 0
+    }
+
+    pub fn write_packed_uint_32(&mut self, int: u8) {
+        let mut value = int;
+        while value > 0 {
+            let mut b = value & 0xFF;
+            if  value >= 0x80 {
+                b |= 0x80;
+            }
+            self.write_byte(b);
+            value >>= 7;
+        };
     }
 
     pub fn write_byte(&mut self, byte: u8) {
@@ -141,9 +155,17 @@ impl Buffer {
 
     pub fn write_uint_16(&mut self, int: u16) {
         for x in int.to_be_bytes() {
+            println!("Bit: {:#04X?}", x);
             self.write_byte(x);
+        };
+    }
+
+    pub fn write_string(&mut self, str: String) {
+        self.write_packed_uint_32(str.len() as u8);
+        let b = str.as_bytes();
+        for x in b {
+            self.write_byte(*x);
         }
-        self.position += 2;
     }
 
     pub fn set_position(&mut self, position: usize) {
