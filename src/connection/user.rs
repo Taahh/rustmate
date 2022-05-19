@@ -1,15 +1,16 @@
-use std::net::SocketAddr;
-use tokio::net::UdpSocket;
 use crate::inner::protocol::core_packets::AcknowledgePacket;
 use crate::networking::buffer::Buffer;
 use crate::{convert, Packet, Server};
+use std::net::SocketAddr;
+use tokio::net::UdpSocket;
 
+#[derive(Clone, Copy)]
 pub struct User {
-    pub addr: SocketAddr
+    pub addr: SocketAddr,
 }
 
 impl User {
-    pub fn send_packet<T: Packet>(&self, socket: &UdpSocket, nonce: Option<u16>, packet: T) {
+    pub async fn send_packet<T: Packet>(&self, socket: &UdpSocket, nonce: Option<u16>, packet: T) {
         let buff: [u8; 2048] = [0; 2048];
         let mut buffer = Buffer::new(buff.to_vec());
         buffer.write_byte(packet.get_packet_id());
@@ -30,18 +31,29 @@ impl User {
         let buff: [u8; 2048] = [0; 2048];
         let mut buffer = Buffer::new(buff.to_vec());
         let packet = AcknowledgePacket {
-            nonce: packet_nonce
+            nonce: packet_nonce,
         };
         buffer.write_byte(packet.get_packet_id());
         buffer.write_uint_16(packet_nonce);
         buffer.write_byte(0xff);
-        let buff = &buffer.array()[..buffer.position()];
-        println!("Raw Buffer: {:?}", buff);
-        socket.send_to(buff, self.get_address().to_string());
-        println!("Sending to {}, Ack: {:?}", self.get_address().to_string(), convert(buff));
+        let packet_buffer = &buffer.array()[..buffer.position()];
+        let length_sent = futures::executor::block_on(
+            socket.send_to(&packet_buffer, self.get_address().to_string()),
+        )
+        .unwrap();
+        println!(
+            "Sending to {} length {}, Ack: {:?}",
+            self.get_address().to_string(),
+            length_sent,
+            convert(packet_buffer)
+        );
     }
 
     pub fn get_address(&self) -> SocketAddr {
         self.addr
+    }
+
+    pub fn from(user: &User) -> Self {
+        User { addr: user.addr }
     }
 }

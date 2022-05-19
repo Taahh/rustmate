@@ -1,6 +1,7 @@
 use byteorder::{BigEndian, ReadBytesExt};
-use crate::convert;
+use std::mem::transmute;
 
+#[derive(Debug, Clone)]
 pub struct Buffer {
     position: usize,
     byte_array: Vec<u8>,
@@ -23,6 +24,21 @@ impl Buffer {
         return x[0] as i8;
     }
 
+    pub fn read_unsigned_byte(&mut self) -> u8 {
+        let position = self.position.clone();
+        self.position += 1;
+
+        let vec = &mut self.byte_array.clone();
+
+        let x = &vec[position..self.position];
+        let mut empty_bytes: [u8; 1] = [0; 1];
+        for i in 0..x.len() {
+            empty_bytes[i] = x[i];
+        }
+        let float = unsafe { transmute::<[u8; 1], u8>(empty_bytes) };
+        return float;
+    }
+
     pub fn read_uint_16(&mut self) -> u16 {
         let position = self.position.clone();
         self.position += 2;
@@ -30,6 +46,7 @@ impl Buffer {
         let vec = &mut self.byte_array.clone();
 
         let x = &vec[position..self.position];
+
         return x.clone().read_u16::<BigEndian>().unwrap();
     }
 
@@ -41,6 +58,45 @@ impl Buffer {
 
         let x = &vec[position..self.position];
         return x.clone().read_i32::<BigEndian>().unwrap();
+    }
+
+    pub fn read_uint_32(&mut self) -> u32 {
+        /*let position = self.position.clone();
+        self.position += 4;
+
+        let vec = &mut self.byte_array.clone();
+
+        let x = &vec[position..self.position];
+        return x.clone().read_u32::<BigEndian>().unwrap();*/
+        let vec = &mut self.byte_array.clone();
+        let position = self.position;
+        self.position += 4;
+        let bytes = &vec[position..self.position];
+
+        println!("Bytes: {:?}", bytes);
+        let mut empty_bytes: [u8; 4] = [0; 4];
+        for i in 0..bytes.len() {
+            empty_bytes[i] = bytes[i];
+        }
+        let float = unsafe { transmute::<[u8; 4], u32>(empty_bytes) };
+        // let float = f32::from_be_bytes(empty_bytes);*/
+        return float;
+    }
+
+    pub fn read_float(&mut self) -> f32 {
+        let vec = &mut self.byte_array.clone();
+        let position = self.position;
+        self.position += 4;
+        let bytes = &vec[position..self.position];
+
+        println!("Bytes: {:?}", bytes);
+        let mut empty_bytes: [u8; 4] = [0; 4];
+        for i in 0..bytes.len() {
+            empty_bytes[i] = bytes[i];
+        }
+        let float = unsafe { transmute::<[u8; 4], f32>(empty_bytes) };
+        // let float = f32::from_be_bytes(empty_bytes);*/
+        return float;
     }
 
     pub fn read_string(&mut self) -> String {
@@ -72,15 +128,20 @@ impl Buffer {
         return i8::try_from(output).expect("Unable to convert output to i8");
     }
 
+    pub fn read_bool(&mut self) -> bool {
+        let byte = self.read_byte();
+        println!("Boolean: {}", byte);
+        byte != 0
+    }
+
     pub fn write_byte(&mut self, byte: u8) {
         self.byte_array.insert(self.position, byte);
-        println!("Wrote byte array at index {}, {:?}", self.position,self.byte_array);
         self.position += 1;
     }
 
     pub fn write_uint_16(&mut self, int: u16) {
         for x in int.to_be_bytes() {
-            self.byte_array.insert(self.position, x);
+            self.write_byte(x);
         }
         self.position += 2;
     }
@@ -104,7 +165,14 @@ impl Buffer {
     pub fn clone(&self) -> Buffer {
         Buffer {
             position: self.position,
-            byte_array: (&self).byte_array.clone()
+            byte_array: (&self).byte_array.clone(),
+        }
+    }
+
+    pub fn from(buffer: &Buffer) -> Self {
+        Self {
+            position: buffer.position,
+            byte_array: buffer.clone().byte_array,
         }
     }
 }
