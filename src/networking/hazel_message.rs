@@ -16,8 +16,8 @@ impl HazelMessage {
     pub fn tag(&self) -> u8 {
         self.tag
     }
-    pub fn payload(&self) -> &Buffer {
-        &self.payload
+    pub fn payload(&mut self) -> &mut Buffer {
+        self.payload.borrow_mut()
     }
 
     pub fn set_length(&mut self, length: u16) {
@@ -50,6 +50,24 @@ impl HazelMessage {
 
         hazel_msg.set_payload(Buffer::new((&buffer.array()[buffer.position()..]).to_vec()));
         return Some(hazel_msg);
+    }
+
+    pub fn start_message(tag: u8) -> Self {
+        let mut me = Self {
+            length: 0,
+            tag,
+            payload: Buffer::new(Vec::new()),
+        };
+        me.payload.write_byte(me.tag);
+        return me;
+    }
+
+    pub fn end_message(&mut self) {
+        let position = self.payload.position();
+        self.payload.set_position(0);
+        println!("Writing hazel payload size: {}", self.payload.size());
+        self.payload.write_uint_16((self.payload.size() - 1) as u16);
+        self.payload.set_position(position);
     }
 
     /*pub fn read_all(buffer: &mut Buffer) -> Vec<HazelMessage> {

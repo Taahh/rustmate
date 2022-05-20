@@ -1,6 +1,6 @@
 use crate::inner::protocol::core_packets::AcknowledgePacket;
 use crate::networking::buffer::Buffer;
-use crate::{convert, Packet, Server};
+use crate::{convert, Packet, ReliablePacket, Server};
 use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 
@@ -10,6 +10,27 @@ pub struct User {
 }
 
 impl User {
+    pub fn send_reliable_packet<T: Packet>(&self, socket: &UdpSocket, nonce: u16, packet: T) {
+        let buff: [u8; 2048] = [0; 2048];
+        let mut buffer = Buffer::new(buff.to_vec());
+        let reliable_packet = ReliablePacket {
+            nonce,
+            hazel_msg: None,
+        };
+        buffer.write_byte(reliable_packet.get_packet_id());
+        // println!("Reliable Packet: ")
+        buffer.write_uint_16(nonce);
+        packet.serialize(&mut buffer);
+        socket.send_to(
+            &buffer.array()[..buffer.position()],
+            self.get_address().to_string(),
+        );
+        println!(
+            "Sending Reliable Packet {:?}",
+            convert(&buffer.array()[..buffer.position()])
+        )
+    }
+
     pub fn send_packet<T: Packet>(&self, socket: &UdpSocket, nonce: Option<u16>, packet: T) {
         let buff: [u8; 2048] = [0; 2048];
         let mut buffer = Buffer::new(buff.to_vec());
@@ -22,9 +43,12 @@ impl User {
         buffer.set_position(0);
         buffer.write_uint_16(buffer.size() as u16);
         buffer.set_position(current_position);
-        println!("Raw Buffer: {:?}", buff);
+        // println!("Raw Buffer: {:?}", buff);
         socket.send_to(&buff[..current_position], self.get_address().to_string());
-        println!("Sending {:?}", &buff[..current_position])
+        println!(
+            "Sending Non-Reliable Packet {:?}",
+            &buff[..current_position]
+        )
     }
 
     pub fn send_ack(&self, socket: &UdpSocket, packet_nonce: u16) {
@@ -42,7 +66,7 @@ impl User {
         )
         .unwrap();
         println!(
-            "Sending to {} length {}, Ack: {:?}",
+            "Sending Ack to {} length {}, Ack: {:?}",
             self.get_address().to_string(),
             length_sent,
             convert(packet_buffer)

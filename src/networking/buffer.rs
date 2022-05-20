@@ -1,5 +1,5 @@
-use std::borrow::BorrowMut;
 use byteorder::{BigEndian, ReadBytesExt};
+use std::borrow::BorrowMut;
 use std::mem::transmute;
 use std::ops::Shl;
 
@@ -52,14 +52,48 @@ impl Buffer {
         return x.clone().read_u16::<BigEndian>().unwrap();
     }
 
-    pub fn read_int_32(&mut self) -> i32 {
+    pub fn read_int_16(&mut self) -> i16 {
         let position = self.position.clone();
+        self.position += 2;
+
+        let vec = &mut self.byte_array.clone();
+
+        let x = &vec[position..self.position];
+
+        return x.clone().read_i16::<BigEndian>().unwrap();
+    }
+
+    pub fn read_int_32(&mut self) -> i32 {
+        /*let position = self.position.clone();
         self.position += 4;
 
         let vec = &mut self.byte_array.clone();
 
         let x = &vec[position..self.position];
-        return x.clone().read_i32::<BigEndian>().unwrap();
+        return x.clone().read_i32::<BigEndian>().unwrap();*/
+        let vec = &mut self.byte_array.clone();
+        let position = self.position;
+        self.position += 4;
+        let bytes = &vec[position..self.position];
+
+        println!("Bytes: {:?}", bytes);
+        let mut empty_bytes: [u8; 4] = [0; 4];
+        for i in 0..bytes.len() {
+            empty_bytes[i] = bytes[i];
+        }
+        let float = unsafe { transmute::<[u8; 4], i32>(empty_bytes) };
+        // let float = f32::from_be_bytes(empty_bytes);*/
+        return float;
+    }
+
+    pub fn read_int_64(&mut self) -> i64 {
+        let position = self.position.clone();
+        self.position += 8;
+
+        let vec = &mut self.byte_array.clone();
+
+        let x = &vec[position..self.position];
+        return x.clone().read_i64::<BigEndian>().unwrap();
     }
 
     pub fn read_uint_32(&mut self) -> u32 {
@@ -116,7 +150,7 @@ impl Buffer {
         let mut output: u32 = 0;
         let mut shift = 0;
         while read_more {
-            let mut byte: u32 = u32::from(self.read_byte());
+            let mut byte: u8 = self.read_unsigned_byte();
             if byte >= 0x80 {
                 read_more = true;
                 byte ^= 0x80;
@@ -124,7 +158,7 @@ impl Buffer {
                 read_more = false;
             }
 
-            output |= byte.checked_shl(shift).unwrap_or(0) as u8;
+            output |= byte.checked_shl(shift).unwrap_or(0) as u32;
             shift += 7;
         }
         return /*i8::try_from(output).expect("Unable to convert output to i8")*/ output;
@@ -140,12 +174,14 @@ impl Buffer {
         let mut value = int;
         while value > 0 {
             let mut b = value & 0xFF;
-            if  value >= 0x80 {
+            if value >= 0x80 {
                 b |= 0x80;
             }
-            self.write_byte(b);
+            for x in b.to_be_bytes() {
+                self.write_byte(x);
+            }
             value >>= 7;
-        };
+        }
     }
 
     pub fn write_byte(&mut self, byte: u8) {
@@ -157,11 +193,20 @@ impl Buffer {
         for x in int.to_be_bytes() {
             println!("Bit: {:#04X?}", x);
             self.write_byte(x);
-        };
+        }
+    }
+
+    pub fn write_int_32(&mut self, int: i32) {
+        let mut arr: Vec<u8> = int.to_be_bytes().to_vec();
+        arr.reverse();
+        for x in arr {
+            // println!("Bit: {:#04X?}", x);
+            self.write_byte(x);
+        }
     }
 
     pub fn write_string(&mut self, str: String) {
-        self.write_packed_uint_32(str.len() as u8);
+        self.write_packed_uint_32(str.len() as u32);
         let b = str.as_bytes();
         for x in b {
             self.write_byte(*x);
@@ -170,6 +215,10 @@ impl Buffer {
 
     pub fn set_position(&mut self, position: usize) {
         self.position = position;
+    }
+
+    pub fn set_array(&mut self, arr: Vec<u8>) {
+        self.byte_array = arr;
     }
 
     pub fn position(&self) -> usize {
@@ -196,5 +245,12 @@ impl Buffer {
             position: buffer.position,
             byte_array: buffer.clone().byte_array,
         }
+    }
+
+    pub fn combine(&mut self, arr: &mut Vec<u8>) -> Self {
+        let new_arr = self.byte_array[..self.position].to_vec();
+        self.byte_array = new_arr;
+        self.byte_array.append(arr);
+        return self.clone();
     }
 }

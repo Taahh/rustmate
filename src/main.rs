@@ -2,6 +2,8 @@ extern crate core;
 
 use crate::inner::protocol::core_packets::{HelloPacket, ReliablePacket};
 use crate::inner::protocol::Packet;
+use crate::inner::{code_to_int, int_to_code};
+use crate::networking::buffer::Buffer;
 use crate::networking::hazel_message::HazelMessage;
 use crate::user::User;
 use std::collections::HashMap;
@@ -32,6 +34,10 @@ impl Server {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    println!(
+        "Test Code: {}",
+        int_to_code(code_to_int("REDSUS".to_string()))
+    );
     let mut users: HashMap<SocketAddr, User> = HashMap::new();
 
     let addr = SocketAddr::from_str("127.0.0.1:22023").unwrap();
@@ -54,12 +60,13 @@ async fn main() -> io::Result<()> {
             user = Some(User::from(pointer_user));
         }
         let mut buffer = networking::buffer::Buffer::new(buf.to_vec());
+        buffer.set_array((&buffer.array()[..len]).to_vec());
         let packet_type = buffer.read_byte();
         println!(
             "Received a packet of length {}, packet ID {}, from /{:?}",
             len, packet_type, addr
         );
-        println!("Packet Buffer: {:?}", convert(buf.as_ref()));
+        println!("Packet Buffer: {:?}", convert(&buffer.array()[0..]));
         match packet_type {
             8 => {
                 let nonce = buffer.read_uint_16();
@@ -79,6 +86,7 @@ async fn main() -> io::Result<()> {
             }
             0x0c => {
                 let nonce = buffer.read_uint_16();
+                println!("Received ping with a nonce of {}", nonce);
                 user.unwrap().send_ack(&socket, nonce);
             }
             _ => {}
