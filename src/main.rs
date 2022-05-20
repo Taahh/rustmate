@@ -71,11 +71,24 @@ async fn main() -> io::Result<()> {
             8 => {
                 let nonce = buffer.read_uint_16();
                 println!("Hello Packet: {}", nonce);
-                let mut packet = HelloPacket { nonce };
+                let mut packet = HelloPacket {
+                    nonce,
+                    modded_hello: None,
+                    client_version: None,
+                    username: None,
+                    auth: None,
+                    language: None,
+                    chat_mode: None,
+                    platform_id: None,
+                    platform_name: None,
+                    protocol_version: None,
+                    mod_count: None
+                };
                 packet.deserialize(&mut buffer);
                 packet.process_packet(&socket, &user.unwrap());
             }
             1 => {
+                println!("Reliablee!!!!!!!!!!!!");
                 let nonce = buffer.read_uint_16();
                 let mut reliable_packet = ReliablePacket {
                     nonce,

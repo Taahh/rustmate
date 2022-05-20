@@ -18,6 +18,41 @@ pub struct JoinedGame {
     pub host_id: i32,
 }
 
+pub struct ModdedHandshake {
+    pub protocol_version: i8,
+    pub mod_count: u32
+}
+
+impl Packet for ModdedHandshake {
+    fn get_packet_id(&self) -> u8 {
+        todo!()
+    }
+
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+    }
+
+    fn serialize(&self, buffer: &mut Buffer) -> Buffer {
+        let mut hazel_msg = HazelMessage::start_message(255);
+        hazel_msg
+            .payload()
+            .write_byte(0);
+        hazel_msg.payload().write_string("Test Server".to_string());
+        hazel_msg.payload().write_string("0.0.1".to_string());
+        hazel_msg.payload().write_packed_uint_32(0);
+        hazel_msg.end_message();
+        println!(
+            "Hazel Msg: {:?}",
+            convert(&hazel_msg.payload().array()[0..])
+        );
+        buffer.combine(&mut hazel_msg.payload().array());
+        println!("New Buffer: {:?}", convert(&buffer.array()[0..]));
+        buffer.set_position(hazel_msg.payload().position() + buffer.position() + 2);
+        return buffer.clone();
+    }
+
+    fn process_packet(&mut self, socket: &UdpSocket, user: &User) {}
+}
+
 impl Packet for HostGame {
     fn get_packet_id(&self) -> u8 {
         todo!()

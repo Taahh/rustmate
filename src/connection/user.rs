@@ -39,16 +39,11 @@ impl User {
             buffer.write_uint_16(nonce.unwrap());
         }
         packet.serialize(&mut buffer);
-        let current_position = buffer.position();
-        buffer.set_position(0);
-        buffer.write_uint_16(buffer.size() as u16);
-        buffer.set_position(current_position);
-        // println!("Raw Buffer: {:?}", buff);
-        socket.send_to(&buff[..current_position], self.get_address().to_string());
         println!(
             "Sending Non-Reliable Packet {:?}",
-            &buff[..current_position]
-        )
+            convert(&buffer.array()[..buffer.position()])
+        );
+        socket.send_to(&buffer.array()[..buffer.position()], self.get_address().to_string());
     }
 
     pub fn send_ack(&self, socket: &UdpSocket, packet_nonce: u16) {
@@ -64,7 +59,7 @@ impl User {
         let length_sent = futures::executor::block_on(
             socket.send_to(&packet_buffer, self.get_address().to_string()),
         )
-        .unwrap();
+            .unwrap();
         println!(
             "Sending Ack to {} length {}, Ack: {:?}",
             self.get_address().to_string(),
