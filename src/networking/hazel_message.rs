@@ -66,7 +66,7 @@ impl HazelMessage {
         let position = self.payload.position();
         self.payload.set_position(0);
         println!("Writing hazel payload size: {}", self.payload.size());
-        self.payload.write_uint_16((self.payload.size() - 1) as u16);
+        self.payload.write_uint_16_le((self.payload.size() - 1) as u16);
         self.payload.set_position(position);
     }
 

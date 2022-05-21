@@ -137,8 +137,9 @@ impl Packet for JoinedGame {
         hazel_msg
             .payload()
             .write_int_32(code_to_int("REDSUS".to_string()));
-        hazel_msg.payload().write_int_32(0);
-        hazel_msg.payload().write_int_32(0);
+        hazel_msg.payload().write_int_32(1);
+        hazel_msg.payload().write_int_32(1);
+        hazel_msg.payload().write_packed_uint_32(0);
         hazel_msg.end_message();
         println!("Hazel: {:?}", convert(&hazel_msg.payload().array()[0..]));
         buffer.combine(&mut hazel_msg.payload().array());

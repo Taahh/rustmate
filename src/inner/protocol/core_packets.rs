@@ -93,6 +93,11 @@ impl Packet for ReliablePacket {
                 host_game.deserialize(&mut Buffer::from(msg.payload()));
                 host_game.process_packet(socket, user);
                 user.send_reliable_packet(socket, self.nonce, host_game);
+                user.send_reliable_packet(socket, self.nonce, JoinedGame {
+                    code: code_to_int("REDSUS".to_string()),
+                    join_id: 1,
+                    host_id: 1
+                });
             }
             1 => {
                 println!("Join Game Packet!");
@@ -138,8 +143,6 @@ impl Packet for HelloPacket {
     }
 
     fn deserialize(&mut self, buffer: &mut Buffer) {
-
-
         let hazel_version = buffer.read_byte();
         let mut client_version = buffer.read_int_32();
         println!("Version: {}", client_version);

@@ -170,9 +170,32 @@ impl Buffer {
     }
 
     pub fn write_uint_16(&mut self, int: u16) {
-        let float = unsafe { transmute::<u16, [u8; 2]>(int) };
-        for x in float {
-            self.write_byte(x);
+        // let float = unsafe { transmute::<u16, [u8; 2]>(int) };
+        // for x in float {
+        //     self.write_byte(x);
+        // }
+        // for x in int.to_be_bytes() {
+        //     self.write_byte(x);
+        // }
+        let bytes = int.to_be_bytes();
+        for x in 0..bytes.len() {
+            println!("Writing Uint16 Byte: {}", bytes[x]);
+            self.write_byte(bytes[x]);
+        }
+    }
+
+    pub fn write_uint_16_le(&mut self, int: u16) {
+        // let float = unsafe { transmute::<u16, [u8; 2]>(int) };
+        // for x in float {
+        //     self.write_byte(x);
+        // }
+        // for x in int.to_be_bytes() {
+        //     self.write_byte(x);
+        // }
+        let bytes = int.to_le_bytes();
+        for x in 0..bytes.len() {
+            println!("Writing LE Uint16 Byte: {}", bytes[x]);
+            self.write_byte(bytes[x]);
         }
     }
 
