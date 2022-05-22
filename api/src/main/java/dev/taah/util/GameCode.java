@@ -5,6 +5,7 @@ import lombok.Getter;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -22,7 +23,6 @@ public class GameCode
 
     private final String gameCode;
     private final int gameId;
-
     public GameCode(String gameCode) {
         this.gameCode = gameCode;
         this.gameId = codeToInt(gameCode);
@@ -89,6 +89,16 @@ public class GameCode
         int lastFour = (third + 26 * (fourth + 26 * (fifth + 26 * sixth)));
 
         return firstTwo | ((lastFour << 10) & 0x3FFFFC00) | 0x80000000;
+    }
+
+    public static GameCode generateCode()
+    {
+        StringBuilder s = new StringBuilder();
+        for (int i = 0; i < 6; i++)
+        {
+            s.append(CHAR_SET[ThreadLocalRandom.current().nextInt(CHAR_SET.length)]);
+        };
+        return new GameCode(s.toString());
     }
 
     @Override

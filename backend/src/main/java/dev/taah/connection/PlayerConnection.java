@@ -2,6 +2,7 @@ package dev.taah.connection;
 
 import dev.taah.data.PlatformData;
 import dev.taah.packet.AbstractPacket;
+import dev.taah.packet.AcknowledgePacket;
 import dev.taah.util.PacketBuffer;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
@@ -27,6 +28,8 @@ public class PlayerConnection implements IConnection<AbstractPacket<?>>
     private String clientName;
 
     private PlatformData platformData;
+
+    private int nonce = 0;
     @Override
     public UUID getUuid()
     {
@@ -42,8 +45,13 @@ public class PlayerConnection implements IConnection<AbstractPacket<?>>
     @Override
     public void sendPacket(AbstractPacket<?> packet)
     {
+        if (!(packet instanceof AcknowledgePacket))
+        {
+            packet.setNonce(nonce+=1);
+        }
         PacketBuffer buffer = new PacketBuffer();
         buffer.writeByte(packet.getPacketId());
+        buffer.writeShort(packet.getNonce());
         packet.serialize(buffer);
         System.out.printf("Sending %s packet with buffer %n%s", packet.getClass().getSimpleName(), ByteBufUtil.prettyHexDump(buffer));
         this.channel.writeAndFlush(buffer);

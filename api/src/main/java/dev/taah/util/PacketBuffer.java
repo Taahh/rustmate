@@ -813,6 +813,11 @@ public class PacketBuffer extends ByteBuf
         return charSequence.toString();
     }
 
+    public int readPackedInt32()
+    {
+        return (int) readPackedUInt32();
+    }
+
     public long readPackedUInt32()
     {
         boolean readMore = true;

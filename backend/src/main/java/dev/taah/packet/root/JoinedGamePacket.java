@@ -32,7 +32,7 @@ public class JoinedGamePacket extends ReliablePacket<JoinedGamePacket>
     @Override
     public void serialize(PacketBuffer buffer)
     {
-        buffer.writeShort(this.getNonce());
+
         HazelMessage message = HazelMessage.start(0x07);
         message.getPayload().writeInt32(this.gameCode.getGameId());
         message.getPayload().writeInt32(this.joining.getId());

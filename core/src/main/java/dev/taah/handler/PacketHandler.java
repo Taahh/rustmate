@@ -28,11 +28,11 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf>
         System.out.println(ByteBufUtil.prettyHexDump(buffer));
         byte tag = buffer.readByte();
         AbstractPacket packet = CrewmateServer.HANDLER.getPacket(tag);
-        if (msg.readableBytes() < 1) {
-            System.out.printf("Received packet from user %s with packet ID %s and length %s%n", connection.getClientName() == null ? "N/A" : connection.getClientName(), tag, buffer.readableBytes());
-            return;
+        int nonce = -1;
+        if (packet != null && buffer.readableBytes() > 0)
+        {
+            nonce = buffer.readUnsignedShort();
         }
-        int nonce = buffer.readUnsignedShort();
         System.out.printf("Received packet from user %s with nonce %s, packet ID %s, and length %s%n", connection.getClientName() == null ? "N/A" : connection.getClientName(), nonce, tag, buffer.readableBytes());
         if (packet != null) {
             packet.setNonce(nonce);

@@ -2,6 +2,7 @@ package dev.taah.packet;
 
 import dev.taah.connection.PlayerConnection;
 import dev.taah.data.PlatformData;
+import dev.taah.packet.root.ReactorHandshakePacket;
 import dev.taah.util.HazelMessage;
 import dev.taah.util.PacketBuffer;
 
@@ -16,6 +17,8 @@ public class HelloPacket extends AbstractPacket<HelloPacket>
 {
     private String username;
     private PlatformData platformData;
+
+    private boolean isModded;
 
     public HelloPacket()
     {
@@ -43,6 +46,13 @@ public class HelloPacket extends AbstractPacket<HelloPacket>
         buffer.readString();
         buffer.readUInt32();
 
+        if (buffer.readableBytes() > 0)
+        {
+            isModded = true;
+            System.out.println("Reactor Protocol Version: " + buffer.readByte());
+            System.out.println("Mod Count: " + buffer.readPackedUInt32());
+        }
+
         System.out.println("Received Hello Packet on version " + String.format("%s.%s.%s.%s", year, month, day, revision) + " from user " + username);
     }
 
@@ -52,6 +62,10 @@ public class HelloPacket extends AbstractPacket<HelloPacket>
         connection.setPlatformData(packet.platformData);
         connection.setClientName(packet.username);
         connection.sendPacket(new AcknowledgePacket(packet.getNonce()));
+        if (packet.isModded) {
+            System.out.println("SENDING REACTOR HANDSHAKE!");
+            connection.sendPacket(new ReactorHandshakePacket());
+        }
     }
 
     @Override
@@ -63,6 +77,5 @@ public class HelloPacket extends AbstractPacket<HelloPacket>
     @Override
     public void serialize(PacketBuffer buffer)
     {
-
     }
 }

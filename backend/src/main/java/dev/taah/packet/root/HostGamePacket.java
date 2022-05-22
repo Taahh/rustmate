@@ -36,7 +36,6 @@ public class HostGamePacket extends ReliablePacket<HostGamePacket>
     public void serialize(PacketBuffer buffer)
     {
 //        buffer.writeInt32(GameCode.codeToInt("REDSUS"));
-        buffer.writeShort(this.getNonce());
         HazelMessage hazelMessage = HazelMessage.start(0x00);
 //        buffer.writeByteArray(hazelMessage.getPayload().getByteArray());
         hazelMessage.getPayload().writeInt32(this.gameCode.getGameId());
@@ -51,8 +50,12 @@ public class HostGamePacket extends ReliablePacket<HostGamePacket>
         {
             System.out.println("PROCESSING HOST GAME PACKET");
 //            String code = RandomStringUtils.randomAlphabetic(6);
-            String code = "REDSUS";
-            packet.gameCode = new GameCode(code);
+//            String code = "REDSUS";
+            packet.gameCode = GameCode.generateCode();
+            while (GameRoomManager.gameRoomExists(packet.gameCode))
+            {
+                packet.gameCode = GameCode.generateCode();
+            }
             GameRoom server = new GameRoom(packet.gameCode);
             server.setHostUuid(connection.getUuid());
             server.setGameOptionsData(packet.gameOptionsData);

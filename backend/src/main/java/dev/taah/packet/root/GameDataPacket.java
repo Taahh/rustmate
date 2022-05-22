@@ -1,7 +1,6 @@
 package dev.taah.packet.root;
 
 import dev.taah.connection.PlayerConnection;
-import dev.taah.inner.InnerNetObject;
 import dev.taah.packet.ReliablePacket;
 import dev.taah.packet.root.gamedata.AbstractGameData;
 import dev.taah.packet.root.gamedata.SpawnGameData;
@@ -45,8 +44,8 @@ public class GameDataPacket extends ReliablePacket<GameDataPacket>
     public void deserialize(PacketBuffer buffer)
     {
         System.out.println("Game Code: " + new GameCode(buffer.readInt32()).getGameCode());
-        HazelMessage message;
-        while ((message = HazelMessage.read(buffer)) != null)
+        HazelMessage message = null;
+        while ((message = HazelMessage.read(message == null ? buffer : message.getPayload())) != null)
         {
             System.out.println("Game Data Packet ID: " + message.getTag());
             AbstractGameData gameData = getById(message.getTag());

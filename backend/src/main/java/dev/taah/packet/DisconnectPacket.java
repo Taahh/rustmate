@@ -45,8 +45,10 @@ public class DisconnectPacket extends AbstractPacket<DisconnectPacket>
             gameRoom.getPlayers().remove(connection.getUuid());
             if (gameRoom.getPlayers().isEmpty())
             {
+                System.out.println("Removed game room");
                 GameRoomManager.removeGameRoom(gameRoom);
             } else {
+                System.out.println("Assigned new host");
                 gameRoom.setHostUuid(gameRoom.getPlayers().get(gameRoom.getPlayers().keySet().iterator().next()).getUuid());
             }
         }
