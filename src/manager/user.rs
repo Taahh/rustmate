@@ -76,7 +76,7 @@ impl User {
         let length =
             futures::executor::block_on(socket.send_to(&buffer.array, self.socketAddr)).unwrap();
         info!(
-            "Sending reliable packet with length {:?} and buffer {:?}",
+            "Sending reliable packet to {:?} with length {:?} and buffer {:?}", self.username.as_ref().unwrap_or(&"not found".to_string()),
             length,
             convert(&buffer.array)
         );

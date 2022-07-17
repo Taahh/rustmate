@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, MutexGuard};
+use tracing::info;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct GameRoom {
@@ -51,6 +52,7 @@ impl GameRoom {
             if exclude.contains(&x.as_ref().unwrap().player.as_ref().unwrap().id) {
                 continue;
             }
+            info!("NOT SKIPPING: {:?}", x.as_ref().unwrap().username);
             x.as_ref()
                 .unwrap()
                 .send_reliable_packet(packet.clone(), socket)

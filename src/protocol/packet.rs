@@ -1,11 +1,12 @@
 use crate::connections::update_user;
-use crate::protocol::reliable_packets::{GameDataPacket, HostGamePacket, JoinGamePacket};
+use crate::protocol::reliable_packets::{GameDataPacket, HostGamePacket, JoinGamePacket, ReactorHandshakePacket};
 use crate::structs::structs::PlatformSpecificData;
 use crate::util::hazel::HazelMessage;
 use crate::{get_users, Buffer, User, CONNECTIONS};
 use tokio::net::UdpSocket;
 use tracing::info;
 use tracing::log::{debug, log};
+use crate::inner::rooms::get_rooms;
 
 pub trait Packet {
     fn deserialize(&mut self, buffer: &mut Buffer);
@@ -28,12 +29,13 @@ pub struct HelloPacket {
     pub lastLanguage: Option<u32>,
     pub chatMode: Option<i8>,
     pub platformData: Option<PlatformSpecificData>,
+    pub modded: bool
 }
 
 #[derive(Debug)]
 pub struct ReliablePacket {
     pub nonce: u16,
-    pub reliable_packet_id: Option<i8>,
+    pub reliable_packet_id: Option<u8>,
     pub hazel_message: Option<HazelMessage>,
     pub buffer: Buffer,
 }
@@ -75,6 +77,14 @@ impl Packet for HelloPacket {
         });
         buffer.read_string();
         buffer.read_u32();
+        if buffer.position < buffer.array.len() {
+            info!("REACTOR HANDSHAKE!");
+            buffer.read_i8();
+            // todo!("Come back to this because there may be a byte I forgot to read after the uint 32 read");
+            info!("Reactor Initial Version: {:?}", buffer.read_i8());
+            info!("Reactor Mod Count: {:?}", buffer.read_packed_uint_32());
+            self.modded = true;
+        }
     }
 
     fn serialize(self, buffer: &mut Buffer) {}
@@ -88,6 +98,9 @@ impl Packet for HelloPacket {
         update_user(user_owned);
         info!("Test");
         user.send_ack(self.nonce, socket);
+        if self.modded {
+            user.send_reliable_packet(ReactorHandshakePacket {}, socket);
+        }
     }
 }
 
@@ -119,7 +132,7 @@ impl Packet for ReliablePacket {
             packet.process(user, socket);
         } else if id == 1 {
             info!("Reliable Join Game Packet");
-            let mut join_game = JoinGamePacket { code: None };
+            let mut join_game = JoinGamePacket { code: None, joining: None, host: None, room: None };
             join_game.deserialize(&mut self.hazel_message.unwrap().buffer);
             join_game.process(user, socket);
         } else if id == 5 {
@@ -163,7 +176,24 @@ impl Packet for DisconnectPacket {
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {
         let socketAddr = user.socketAddr;
+        let player = user.to_owned().player;
         tokio::spawn(async move {
+            if player != None {
+                let player_actual = player.as_ref().unwrap().to_owned();
+                let code = player_actual.game_code;
+                let mut rooms = get_rooms();
+                let room = rooms.get_mut(&code).unwrap().as_mut().unwrap();
+                room.players.remove(&player_actual.id);
+                if room.host == player_actual.id {
+                    if room.players.is_empty() {
+                        rooms.remove(&code);
+                        info!("DESTROYING GAME ROOM {:?}", code.code_string);
+                    } else {
+                        room.host = room.players.keys().map(|f| *f).collect::<Vec<i32>>()[0];
+                        info!("ASSIGNING NEW HOST {:?}", code.code_string);
+                    }
+                }
+            }
             get_users().remove(&socketAddr);
         });
     }

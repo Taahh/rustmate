@@ -20,8 +20,12 @@ pub struct HostGamePacket {
     pub code: Option<GameCode>,
 }
 
+#[derive(Clone)]
 pub struct JoinGamePacket {
     pub code: Option<GameCode>,
+    pub joining: Option<User>,
+    pub host: Option<i32>,
+    pub room: Option<GameRoom>,
 }
 
 pub struct JoinedGamePacket {
@@ -33,6 +37,24 @@ pub struct JoinedGamePacket {
 pub struct GameDataPacket {
     pub code: Option<GameCode>,
     pub buffer: Buffer,
+}
+
+pub struct ReactorHandshakePacket;
+
+impl Packet for ReactorHandshakePacket {
+    fn deserialize(&mut self, buffer: &mut Buffer) {}
+
+    fn serialize(self, buffer: &mut Buffer) {
+        let mut hazel_message = HazelMessage::start_message(255);
+        hazel_message.buffer.write_i8(0);
+        hazel_message.buffer.write_string("Hydrogen".to_string());
+        hazel_message.buffer.write_string("0.0.1".to_string());
+        hazel_message.buffer.write_packed_u32(0);
+        hazel_message.end_message();
+        hazel_message.copy_to(buffer);
+    }
+
+    fn process(self, user: &mut &User, socket: &UdpSocket) {}
 }
 
 impl Packet for HostGamePacket {
@@ -74,7 +96,25 @@ impl Packet for JoinGamePacket {
         self.code = Some(GameCode::new_code_int(buffer.read_i32()));
     }
 
-    fn serialize(self, buffer: &mut Buffer) {}
+    fn serialize(self, buffer: &mut Buffer) {
+        info!("join game serialization");
+        let mut hazel_message = HazelMessage::start_message(0x01);
+        hazel_message.buffer.write_i32_le(self.room.as_ref().unwrap().code.code_int);
+        let user = self.joining.as_ref().unwrap().to_owned();
+        let player = user.player.as_ref().unwrap().to_owned();
+        hazel_message.buffer.write_i32_le(player.id);
+        info!("player id: {:?}", player.id);
+        hazel_message.buffer.write_i32_le(self.room.as_ref().unwrap().host);
+        info!("room host id: {:?}", self.room.as_ref().unwrap().host);
+        hazel_message.buffer.write_string(user.username.as_ref().unwrap().to_string());
+        info!("username: {:?}", user.username.as_ref().unwrap().to_string());
+        user.platformData.as_ref().unwrap().serialize(&mut hazel_message.buffer);
+        hazel_message.buffer.write_packed_u32(0);
+        hazel_message.buffer.write_string("none".to_string());
+        hazel_message.buffer.write_string("none".to_string());
+        hazel_message.end_message();
+        hazel_message.copy_to(buffer);
+    }
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {
         if !room_exists(self.code.as_ref().unwrap().to_owned()) {
@@ -94,8 +134,11 @@ impl Packet for JoinGamePacket {
             game_code: room.clone().code,
         });
 
+        let mut newRoom = false;
+
         if room.players.is_empty() {
             room.host = player_option.as_ref().unwrap().to_owned().id;
+            newRoom = true;
         }
 
         let mut user_mut = user.to_owned();
@@ -115,10 +158,17 @@ impl Packet for JoinGamePacket {
 
         room.players
             .insert(player_option.clone().unwrap().id, user_option.clone());
-        let room_clone = room.clone();
-        map.insert(room_clone.code.clone(), Some(room_clone));
+        let room_clone = Some(room.clone());
+        map.insert(room_clone.as_ref().unwrap().code.clone(), room_clone.clone());
 
         let code = self.code.as_ref().unwrap().to_owned();
+        if !newRoom {
+            let mut packet = self.clone();
+            packet.host = Some(room_clone.as_ref().unwrap().host);
+            packet.joining = user_option.clone();
+            packet.room = room_clone.clone();
+            room_clone.as_ref().unwrap().send_reliable_to_all_but(packet, socket, &[player_option.as_ref().unwrap().id]);
+        }
         user.send_reliable_packet(
             JoinedGamePacket {
                 room: map.get(&code).unwrap().as_ref().unwrap().to_owned(),
@@ -129,16 +179,11 @@ impl Packet for JoinGamePacket {
     }
 }
 
-impl JoinGamePacket {
-    pub fn send_packet(self, user: &mut User, packet: impl Packet, socket: &UdpSocket) {
-        user.send_reliable_packet(packet, socket);
-    }
-}
-
 impl Packet for JoinedGamePacket {
     fn deserialize(&mut self, buffer: &mut Buffer) {}
 
     fn serialize(self, buffer: &mut Buffer) {
+        info!("joined game");
         let mut hazel_message = HazelMessage::start_message(0x07);
         let room = self.room;
         hazel_message.buffer.write_i32_le(room.code.code_int);
@@ -146,25 +191,31 @@ impl Packet for JoinedGamePacket {
             .buffer
             .write_i32_le(self.user.player.unwrap().id);
         hazel_message.buffer.write_i32_le(room.host);
-        hazel_message
-            .buffer
-            .write_packed_u32((room.players.len() - 1) as u32);
-        for (x, v) in room.players {
-            let user = v.as_ref().unwrap().to_owned();
-            if user.socketAddr.eq(&self.user.socketAddr) {
-                continue;
-            }
-            let player = user.player.as_ref().unwrap().to_owned();
-            hazel_message.buffer.write_packed_u32(x as u32);
+        if room.players.len() - 1 <= 0 {
             hazel_message
                 .buffer
-                .write_string(user.username.as_ref().unwrap().to_owned());
-            user.platformData
-                .unwrap()
-                .serialize(&mut hazel_message.buffer);
-            hazel_message.buffer.write_packed_u32(0);
-            hazel_message.buffer.write_string("none".to_string());
-            hazel_message.buffer.write_string("none".to_string());
+                .write_packed_i32(0);
+        } else {
+            hazel_message
+                .buffer
+                .write_packed_i32((room.players.len() - 1) as i32);
+            for (x, v) in room.players {
+                let user = v.as_ref().unwrap().to_owned();
+                if user.socketAddr.eq(&self.user.socketAddr) {
+                    continue;
+                }
+                info!("ADDING {:?} TO JOINED GAME PACKET", user.username.as_ref().unwrap());
+                hazel_message.buffer.write_packed_i32(x);
+                hazel_message
+                    .buffer
+                    .write_string(user.username.as_ref().unwrap().to_owned());
+                user.platformData
+                    .unwrap()
+                    .serialize(&mut hazel_message.buffer);
+                hazel_message.buffer.write_packed_u32(0);
+                hazel_message.buffer.write_string("".to_string());
+                hazel_message.buffer.write_string("".to_string());
+            }
         }
         hazel_message.end_message();
         hazel_message.copy_to(buffer);
