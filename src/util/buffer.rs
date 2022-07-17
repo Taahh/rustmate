@@ -1,7 +1,7 @@
 use std::mem::transmute;
 use tracing::debug;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Buffer {
     pub position: usize,
     pub array: Vec<u8>,

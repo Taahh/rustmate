@@ -1,7 +1,8 @@
-use crate::protocol::reliable_packets::{HostGamePacket, JoinGamePacket};
+use crate::connections::update_user;
+use crate::protocol::reliable_packets::{GameDataPacket, HostGamePacket, JoinGamePacket};
 use crate::structs::structs::PlatformSpecificData;
 use crate::util::hazel::HazelMessage;
-use crate::{Buffer, User};
+use crate::{get_users, Buffer, User, CONNECTIONS};
 use tokio::net::UdpSocket;
 use tracing::info;
 use tracing::log::{debug, log};
@@ -34,11 +35,18 @@ pub struct ReliablePacket {
     pub nonce: u16,
     pub reliable_packet_id: Option<i8>,
     pub hazel_message: Option<HazelMessage>,
+    pub buffer: Buffer,
 }
 
 #[derive(Debug)]
 pub struct PingPacket {
     pub nonce: u16,
+}
+
+#[derive(Debug)]
+pub struct DisconnectPacket {
+    pub disconnect_type: Option<i8>,
+    pub reason: Option<String>,
 }
 
 impl Packet for AcknowledgementPacket {
@@ -73,6 +81,12 @@ impl Packet for HelloPacket {
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {
         info!("hello packet {:?}", self);
+        let mut user_owned = user.to_owned();
+        user_owned.username = self.username;
+        user_owned.platformData = self.platformData;
+        info!("Test 2");
+        update_user(user_owned);
+        info!("Test");
         user.send_ack(self.nonce, socket);
     }
 }
@@ -108,6 +122,14 @@ impl Packet for ReliablePacket {
             let mut join_game = JoinGamePacket { code: None };
             join_game.deserialize(&mut self.hazel_message.unwrap().buffer);
             join_game.process(user, socket);
+        } else if id == 5 {
+            info!("Reliable Game Data Packet");
+            let mut game_data = GameDataPacket {
+                code: None,
+                buffer: self.buffer,
+            };
+            game_data.deserialize(&mut self.hazel_message.unwrap().buffer);
+            game_data.process(user, socket);
         }
     }
 }
@@ -119,5 +141,30 @@ impl Packet for PingPacket {
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {
         user.send_ack(self.nonce, socket);
+    }
+}
+
+impl Packet for DisconnectPacket {
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+        if buffer.position >= buffer.array.len() {
+            return;
+        }
+    }
+
+    fn serialize(self, buffer: &mut Buffer) {
+        let mut hazel_message = HazelMessage::start_message(0x00);
+        if self.disconnect_type != None && self.reason != None {
+            hazel_message.buffer.write_i8(self.disconnect_type.unwrap());
+            hazel_message.buffer.write_string(self.reason.unwrap());
+        }
+        hazel_message.end_message();
+        hazel_message.copy_to(buffer);
+    }
+
+    fn process(self, user: &mut &User, socket: &UdpSocket) {
+        let socketAddr = user.socketAddr;
+        tokio::spawn(async move {
+            get_users().remove(&socketAddr);
+        });
     }
 }
