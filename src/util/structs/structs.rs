@@ -1,9 +1,10 @@
 use crate::structs::enums::RoleType;
 use crate::util::buffer::Buffer;
+use crate::util::hazel::HazelMessage;
 use std::collections::HashMap;
 use tracing::log::info;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct PlatformSpecificData {
     pub platform: i8,
     pub platformName: String,
@@ -56,6 +57,16 @@ pub struct RoleOptionsData {
     pub scientist_battery_charge: i8,
     pub protection_duration_seconds: i8,
     pub imposters_see_protect: bool,
+}
+
+impl PlatformSpecificData {
+    pub fn serialize(&self, buffer: &mut Buffer) {
+        let mut hazel_msg = HazelMessage::start_message(self.platform);
+        let platformName = &self.platformName;
+        hazel_msg.buffer.write_string(platformName.to_string());
+        hazel_msg.end_message();
+        hazel_msg.copy_to(buffer);
+    }
 }
 
 impl GameOptionsData {

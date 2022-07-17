@@ -1,22 +1,38 @@
-use crate::inner::rooms::{room_exists, GameRoom};
+use crate::connections::update_user;
+use crate::inner::rooms::{
+    get_rooms, room_exists, update_room, update_room_callback, GameRoom, ROOMS,
+};
+use crate::manager::user::Player;
 use crate::structs::structs::{GameOptionsData, PlatformSpecificData};
 use crate::util::hazel::HazelMessage;
 use crate::util::inner::GameCode;
-use crate::{convert, Buffer, Packet, User};
+use crate::{convert, get_users, Buffer, DisconnectPacket, Packet, User, CONNECTIONS, RUNTIME};
 use rand::distributions::{Alphanumeric, DistString, Standard};
 use rand::Rng;
+use std::borrow::BorrowMut;
+use std::sync::Arc;
+use std::thread;
 use tokio::net::UdpSocket;
-use tracing::info;
 use tracing::log::{debug, log};
+use tracing::{error, info};
 
 pub struct HostGamePacket {
     pub code: Option<GameCode>,
 }
+
 pub struct JoinGamePacket {
     pub code: Option<GameCode>,
 }
+
 pub struct JoinedGamePacket {
-    pub code: GameCode,
+    pub room: GameRoom,
+    pub user: User,
+}
+
+#[derive(Clone)]
+pub struct GameDataPacket {
+    pub code: Option<GameCode>,
+    pub buffer: Buffer,
 }
 
 impl Packet for HostGamePacket {
@@ -43,6 +59,11 @@ impl Packet for HostGamePacket {
     }
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {
+        /*user.send_disconnect(DisconnectPacket {
+            reason: Some("Hi".to_string()),
+            disconnect_type: Some(0x08)
+        }, socket);*/
+
         GameRoom::new(self.code.as_ref().unwrap().clone());
         user.send_reliable_packet(self, socket);
     }
@@ -56,12 +77,61 @@ impl Packet for JoinGamePacket {
     fn serialize(self, buffer: &mut Buffer) {}
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {
+        if !room_exists(self.code.as_ref().unwrap().to_owned()) {
+            info!("Room not found");
+            return;
+        }
+        let mut map = get_rooms();
+        let mut room = map
+            .get(self.code.as_ref().unwrap())
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .to_owned();
+        let next_length = room.players.len() + 1;
+        let player_option = Some(Player {
+            id: next_length as i32,
+            game_code: room.clone().code,
+        });
+
+        if room.players.is_empty() {
+            room.host = player_option.as_ref().unwrap().to_owned().id;
+        }
+
+        let mut user_mut = user.to_owned();
+        user_mut.player = player_option.clone();
+        let user_option = Some(user_mut.clone());
+        let addr = user_option.as_ref().unwrap().socketAddr;
+        tokio::spawn(async move {
+            CONNECTIONS
+                .lock()
+                .await
+                .get_mut(&addr)
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .player = user_mut.player;
+        });
+
+        room.players
+            .insert(player_option.clone().unwrap().id, user_option.clone());
+        let room_clone = room.clone();
+        map.insert(room_clone.code.clone(), Some(room_clone));
+
+        let code = self.code.as_ref().unwrap().to_owned();
         user.send_reliable_packet(
             JoinedGamePacket {
-                code: self.code.unwrap(),
+                room: map.get(&code).unwrap().as_ref().unwrap().to_owned(),
+                user: user_option.as_ref().unwrap().to_owned(),
             },
             socket,
         );
+    }
+}
+
+impl JoinGamePacket {
+    pub fn send_packet(self, user: &mut User, packet: impl Packet, socket: &UdpSocket) {
+        user.send_reliable_packet(packet, socket);
     }
 }
 
@@ -70,14 +140,74 @@ impl Packet for JoinedGamePacket {
 
     fn serialize(self, buffer: &mut Buffer) {
         let mut hazel_message = HazelMessage::start_message(0x07);
-        hazel_message.buffer.write_i32_le(self.code.code_int);
-        hazel_message.buffer.write_i32_le(1);
-        hazel_message.buffer.write_i32_le(1);
-        hazel_message.buffer.write_packed_u32(0);
+        let room = self.room;
+        hazel_message.buffer.write_i32_le(room.code.code_int);
+        hazel_message
+            .buffer
+            .write_i32_le(self.user.player.unwrap().id);
+        hazel_message.buffer.write_i32_le(room.host);
+        hazel_message
+            .buffer
+            .write_packed_u32((room.players.len() - 1) as u32);
+        for (x, v) in room.players {
+            let user = v.as_ref().unwrap().to_owned();
+            if user.socketAddr.eq(&self.user.socketAddr) {
+                continue;
+            }
+            let player = user.player.as_ref().unwrap().to_owned();
+            hazel_message.buffer.write_packed_u32(x as u32);
+            hazel_message
+                .buffer
+                .write_string(user.username.as_ref().unwrap().to_owned());
+            user.platformData
+                .unwrap()
+                .serialize(&mut hazel_message.buffer);
+            hazel_message.buffer.write_packed_u32(0);
+            hazel_message.buffer.write_string("none".to_string());
+            hazel_message.buffer.write_string("none".to_string());
+        }
         hazel_message.end_message();
         hazel_message.copy_to(buffer);
-        println!("Finished buffer: {:?}", convert(&buffer.array));
     }
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {}
+}
+
+impl Packet for GameDataPacket {
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+        self.code = Some(GameCode::new_code_int(buffer.read_i32()));
+        info!("Got Game Code: {:?}", self.code);
+    }
+
+    fn serialize(self, buffer: &mut Buffer) {
+        buffer.array = self.buffer.array;
+    }
+
+    fn process(self, user: &mut &User, socket: &UdpSocket) {
+        if !room_exists(self.code.as_ref().unwrap().to_owned()) {
+            info!("Room not found");
+            return;
+        }
+
+        info!("game data user: {:?}", user);
+
+        if user.player == None {
+            error!("User for some reason lacks a player object!");
+            return;
+        }
+
+        let room = get_rooms()
+            .get(&user.player.as_ref().unwrap().game_code)
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .to_owned();
+
+        // let addr = user.socketAddr;
+        room.send_reliable_to_all_but(self, socket, &[user.player.as_ref().unwrap().id]);
+        /*
+        let socketAddr = user.socketAddr;
+        // gameRoom.unwrap().unwrap().players.*/
+    }
 }
