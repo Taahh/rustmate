@@ -3,14 +3,14 @@ use crate::util::buffer::Buffer;
 #[derive(Debug)]
 pub struct HazelMessage {
     pub length: u16,
-    pub tag: i8,
+    pub tag: u8,
     pub buffer: Buffer,
 }
 
 impl HazelMessage {
     pub fn read_message(buffer: &mut Buffer) -> Self {
         let length = buffer.read_u16();
-        let tag = buffer.read_i8();
+        let tag = buffer.read_u8();
         let mut newBuffer = Buffer::new(buffer);
         HazelMessage {
             length,
@@ -19,12 +19,12 @@ impl HazelMessage {
         }
     }
 
-    pub fn start_message(tag: i8) -> Self {
+    pub fn start_message(tag: u8) -> Self {
         let mut buffer = Buffer {
             array: Vec::new(),
             position: 0,
         };
-        buffer.write_i8(tag);
+        buffer.write_u8(tag);
         HazelMessage {
             length: 0,
             tag,
@@ -41,7 +41,8 @@ impl HazelMessage {
     }
 
     pub fn copy_to(&mut self, buffer: &mut Buffer) {
-        buffer.array.append(&mut self.buffer.array);
-        buffer.position += self.buffer.position;
+        buffer.write_u8_arr_le(&*self.buffer.array);
+        // buffer.array.append(&mut self.buffer.array);
+        // buffer.position += self.buffer.position;
     }
 }

@@ -6,7 +6,7 @@ use tracing::log::info;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct PlatformSpecificData {
-    pub platform: i8,
+    pub platform: u8,
     pub platformName: String,
 }
 

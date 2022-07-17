@@ -97,6 +97,7 @@ async fn spawn_udp() {
                         lastLanguage: None,
                         chatMode: None,
                         platformData: None,
+                        modded: false
                     };
                     packet.deserialize(&mut buffer);
                     packet.process(user, socket.as_ref().unwrap());

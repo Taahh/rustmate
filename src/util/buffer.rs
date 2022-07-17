@@ -34,6 +34,13 @@ impl Buffer {
             self.write_u8(x);
         }
     }
+
+    pub fn write_u8_arr_le(&mut self, i: &[u8]) {
+        for x in i {
+            self.write_u8_le(*x);
+        }
+    }
+
     //
     pub fn write_i16(&mut self, i: i16) {
         let mut bytes: [u8; 2] = unsafe { transmute(i.to_be()) };
@@ -92,6 +99,20 @@ impl Buffer {
     }
 
     pub fn write_packed_u32(&mut self, i: u32) {
+        let mut value = i;
+        loop {
+            let mut b = (i & 0xFF) as u8;
+            if value >= 0x80 {
+                b |= 0x80;
+            }
+            self.write_u8(b);
+            value >>= 7;
+            if value <= 0 {
+                break;
+            }
+        }
+    }
+    pub fn write_packed_i32(&mut self, i: i32) {
         let mut value = i;
         loop {
             let mut b = (i & 0xFF) as u8;
