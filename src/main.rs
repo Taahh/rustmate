@@ -1,9 +1,12 @@
+#![feature(type_alias_impl_trait)]
 use crate::connections::{get_users, CONNECTIONS};
 use crate::manager::connections;
 use crate::manager::states::UserState::Loading;
 use crate::manager::user::User;
 use crate::matchmaker::handler::{handle_host, handle_request};
-use crate::protocol::packet::{DisconnectPacket, HelloPacket, Packet, PingPacket, ReliablePacket};
+use crate::protocol::packet::{
+    DisconnectPacket, HelloPacket, NormalPacket, Packet, PingPacket, ReliablePacket,
+};
 use crate::util::buffer::Buffer;
 use crate::util::util::convert;
 use axum::body::Body;
@@ -28,6 +31,8 @@ use tracing::field::debug;
 use tracing::{debug, error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
+
+
 #[path = "./manager/manager.rs"]
 mod manager;
 
@@ -45,6 +50,9 @@ mod structs;
 
 #[path = "./inner/mod.rs"]
 mod inner;
+
+#[path = "./protocol/game_data/mod.rs"]
+mod game_data;
 
 lazy_static! {
     /*pub static ref CONNECTIONS: Mutex<HashMap<SocketAddr, Option<User>>> = {
@@ -97,13 +105,21 @@ async fn spawn_udp() {
                         lastLanguage: None,
                         chatMode: None,
                         platformData: None,
-                        modded: false
+                        modded: false,
                     };
                     packet.deserialize(&mut buffer);
                     packet.process(user, socket.as_ref().unwrap());
                 } else if packet_type == 1 {
                     let mut packet = ReliablePacket {
                         nonce: buffer.read_u16(),
+                        reliable_packet_id: None,
+                        hazel_message: None,
+                        buffer: buffer.clone(),
+                    };
+                    packet.deserialize(&mut buffer);
+                    packet.process(user, socket.as_ref().unwrap());
+                } else if packet_type == 0 {
+                    let mut packet = NormalPacket {
                         reliable_packet_id: None,
                         hazel_message: None,
                         buffer: buffer.clone(),

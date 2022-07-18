@@ -76,7 +76,19 @@ impl User {
         let length =
             futures::executor::block_on(socket.send_to(&buffer.array, self.socketAddr)).unwrap();
         info!(
-            "Sending reliable packet to {:?} with length {:?} and buffer {:?}", self.username.as_ref().unwrap_or(&"not found".to_string()),
+            "Sending reliable packet to {:?} with length {:?} and buffer {:?}",
+            self.username.as_ref().unwrap_or(&"not found".to_string()),
+            length,
+            convert(&buffer.array)
+        );
+    }
+
+    pub fn forward_packet(&self, buffer: Buffer, socket: &UdpSocket) {
+        let length =
+            futures::executor::block_on(socket.send_to(&buffer.array, self.socketAddr)).unwrap();
+        info!(
+            "Forwarding packet to {:?} with length {:?} and buffer {:?}",
+            self.username.as_ref().unwrap_or(&"not found".to_string()),
             length,
             convert(&buffer.array)
         );

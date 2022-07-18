@@ -71,23 +71,23 @@ impl PlatformSpecificData {
 
 impl GameOptionsData {
     pub fn deserialize(buffer: &mut Buffer) -> Self {
-        buffer.read_i8();
-        let version = buffer.read_i8();
-        let max_players = buffer.read_i8();
-        let keywords = buffer.read_u32();
-        let map = buffer.read_i8();
-        let speed_mod = buffer.read_f32();
-        let crew_light = buffer.read_f32();
-        let imposter_light = buffer.read_f32();
-        let kill_cooldown = buffer.read_f32();
-        let common_tasks = buffer.read_i8();
-        let long_tasks = buffer.read_i8();
-        let short_tasks = buffer.read_i8();
-        let emergency_meetings = buffer.read_i32();
-        let imposters = buffer.read_i8();
-        let kill_distance = buffer.read_i8();
-        let discussion_time = buffer.read_i32();
-        let voting_time = buffer.read_i32();
+        buffer.read_i8_le();
+        let version = buffer.read_i8_le();
+        let max_players = buffer.read_i8_le();
+        let keywords = buffer.read_u32_le();
+        let map = buffer.read_i8_le();
+        let speed_mod = buffer.read_f32_le();
+        let crew_light = buffer.read_f32_le();
+        let imposter_light = buffer.read_f32_le();
+        let kill_cooldown = buffer.read_f32_le();
+        let common_tasks = buffer.read_i8_le();
+        let long_tasks = buffer.read_i8_le();
+        let short_tasks = buffer.read_i8_le();
+        let emergency_meetings = buffer.read_i32_le();
+        let imposters = buffer.read_i8_le();
+        let kill_distance = buffer.read_i8_le();
+        let discussion_time = buffer.read_i32_le();
+        let voting_time = buffer.read_i32_le();
         let default = buffer.read_bool();
         let mut emergency_cooldown: Option<i8> = None;
         let mut confirm_ejects: Option<bool> = None;
@@ -141,13 +141,13 @@ impl GameOptionsData {
 
 impl RoleOptionsData {
     pub fn deserialize(buffer: &mut Buffer) -> Self {
-        let length = buffer.read_i32();
+        let length = buffer.read_i32_le();
         let mut roleRates: HashMap<RoleType, RoleRate> = HashMap::new();
         for i in 0..length {
             let role_type: RoleType = unsafe { std::mem::transmute(buffer.read_i16()) };
             let roleRate = RoleRate {
-                max_count: buffer.read_i8() as i32,
-                chance: buffer.read_i8() as i32,
+                max_count: buffer.read_i8_le() as i32,
+                chance: buffer.read_i8_le() as i32,
             };
             roleRates.insert(role_type, roleRate);
         }
@@ -155,14 +155,14 @@ impl RoleOptionsData {
             roles: length,
             roleRates,
             shapeshifter_leave_skin: buffer.read_bool(),
-            shapeshifter_cooldown: buffer.read_i8(),
-            shapeshifter_duration: buffer.read_i8(),
-            scientist_cooldown: buffer.read_i8(),
-            guardian_angel_cooldown: buffer.read_i8(),
-            engineer_cooldown: buffer.read_i8(),
-            engineer_max_vent_time: buffer.read_i8(),
-            scientist_battery_charge: buffer.read_i8(),
-            protection_duration_seconds: buffer.read_i8(),
+            shapeshifter_cooldown: buffer.read_i8_le(),
+            shapeshifter_duration: buffer.read_i8_le(),
+            scientist_cooldown: buffer.read_i8_le(),
+            guardian_angel_cooldown: buffer.read_i8_le(),
+            engineer_cooldown: buffer.read_i8_le(),
+            engineer_max_vent_time: buffer.read_i8_le(),
+            scientist_battery_charge: buffer.read_i8_le(),
+            protection_duration_seconds: buffer.read_i8_le(),
             imposters_see_protect: buffer.read_bool(),
         }
     }
