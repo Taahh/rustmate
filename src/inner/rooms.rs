@@ -1,3 +1,4 @@
+use crate::inner::objects::inner_net_objects::{GameData, VoteBanSystem};
 use crate::util::inner::GameCode;
 use crate::{Buffer, Packet, User};
 use lazy_static::lazy_static;
@@ -8,7 +9,6 @@ use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, MutexGuard};
 use tracing::info;
-use crate::inner::objects::inner_net_objects::{GameData, VoteBanSystem};
 
 #[derive(Debug, Clone)]
 pub struct GameRoom {

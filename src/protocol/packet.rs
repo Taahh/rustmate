@@ -80,13 +80,16 @@ impl Packet for HelloPacket {
         self.lastLanguage = Some(buffer.read_u32());
         self.chatMode = Some(buffer.read_i8());
         info!("remaining buffer: {:?}", &buffer.array[buffer.position..]);
-        let mut platformData = HazelMessage::read_message(buffer).unwrap();;
+        let mut platformData = HazelMessage::read_message(buffer).unwrap();
         info!("data length: {:?}", platformData.length);
         self.platformData = Some(PlatformSpecificData {
             platform: platformData.tag,
             platformName: platformData.buffer.read_string(),
         });
-        info!("remaining bufferafter : {:?}", &buffer.array[buffer.position..]);
+        info!(
+            "remaining bufferafter : {:?}",
+            &buffer.array[buffer.position..]
+        );
         buffer.read_string();
         buffer.read_u32();
         if buffer.position < buffer.array.len() {
@@ -118,7 +121,7 @@ impl Packet for ReliablePacket {
     fn deserialize(&mut self, buffer: &mut Buffer) {
         let pos = buffer.position;
         info!("Hazel: {:?}", &buffer.array[pos..]);
-        let reliable_hazel = HazelMessage::read_message(buffer).unwrap();;
+        let reliable_hazel = HazelMessage::read_message(buffer).unwrap();
         let reliable_packet_id = reliable_hazel.tag;
         self.reliable_packet_id = Some(reliable_packet_id);
         self.hazel_message = Some(reliable_hazel);
@@ -166,7 +169,7 @@ impl Packet for NormalPacket {
     fn deserialize(&mut self, buffer: &mut Buffer) {
         let pos = buffer.position;
         info!("Hazel: {:?}", &buffer.array[pos..]);
-        let reliable_hazel = HazelMessage::read_message(buffer).unwrap();;
+        let reliable_hazel = HazelMessage::read_message(buffer).unwrap();
         let reliable_packet_id = reliable_hazel.tag;
         self.reliable_packet_id = Some(reliable_packet_id);
         self.hazel_message = Some(reliable_hazel);

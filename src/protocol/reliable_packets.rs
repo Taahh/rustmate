@@ -1,4 +1,5 @@
 use crate::connections::update_user;
+use crate::game_data::game_data::{DataData, GameData, SpawnData};
 use crate::inner::rooms::{
     get_rooms, room_exists, update_room, update_room_callback, GameRoom, ROOMS,
 };
@@ -16,7 +17,6 @@ use tokio::net::UdpSocket;
 use tracing::log::{debug, log};
 use tracing::{error, info};
 use tracing_subscriber::registry::Data;
-use crate::game_data::game_data::{GameData, SpawnData, DataData};
 
 pub struct HostGamePacket {
     pub code: Option<GameCode>,
@@ -254,7 +254,13 @@ impl Packet for GameDataPacket {
 
         let mut hazel_buffer = buffer.clone();
 
-        let room = &mut get_rooms().get_mut(self.code.as_ref().unwrap()).as_ref().unwrap().as_ref().unwrap().to_owned();
+        let room = &mut get_rooms()
+            .get_mut(self.code.as_ref().unwrap())
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .to_owned();
 
         while hazel_buffer.position < hazel_buffer.array.len() {
             let mut hazel_msg_option = HazelMessage::read_message(buffer);
@@ -272,18 +278,24 @@ impl Packet for GameDataPacket {
                     let mut spawn_data = SpawnData {
                         game_data: None,
                         vote_ban_system: None,
-                        player_control: None
+                        player_control: None,
                     };
                     spawn_data.deserialize(msg);
                     spawn_data.process(room);
-                },
+                }
                 0x01 => {
                     // let hazel_clone = &mut hazel_msg.clone();
-                    let mut data_data = DataData { net_id: 0, hazel_msg: HazelMessage {
-                        length: 0,
-                        tag: 0,
-                        buffer: Buffer { position: 0, array: vec![] }
-                    } };
+                    let mut data_data = DataData {
+                        net_id: 0,
+                        hazel_msg: HazelMessage {
+                            length: 0,
+                            tag: 0,
+                            buffer: Buffer {
+                                position: 0,
+                                array: vec![],
+                            },
+                        },
+                    };
                     data_data.deserialize(msg);
                     data_data.process(room);
                 }
@@ -320,7 +332,10 @@ impl Packet for GameDataPacket {
         // info!("HELLO GAME DATA");
 
         // let addr = user.socketAddr;
-        room.forward_packet_to_all(self.buffer, socket/*, &[user.player.as_ref().unwrap().id]*/);
+        room.forward_packet_to_all(
+            self.buffer,
+            socket, /*, &[user.player.as_ref().unwrap().id]*/
+        );
         /*
         let socketAddr = user.socketAddr;
         // gameRoom.unwrap().unwrap().players.*/

@@ -1,5 +1,5 @@
-use tracing::info;
 use crate::util::buffer::Buffer;
+use tracing::info;
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct HazelMessage {

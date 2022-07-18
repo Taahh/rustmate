@@ -1,12 +1,12 @@
+use crate::inner::objects::inner_net_objects::{InnerNetObject, PlayerControl};
+use crate::inner::rooms::{get_rooms, GameRoom, ROOMS};
+use crate::util::hazel::HazelMessage;
+use crate::{inner, Buffer};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use tracing::info;
-use crate::{Buffer, inner};
-use crate::inner::objects::inner_net_objects::{InnerNetObject, PlayerControl};
-use crate::inner::rooms::{GameRoom, get_rooms, ROOMS};
-use crate::util::hazel::HazelMessage;
 
 type InnerType = &'static (dyn InnerNetObject + Sync);
 
@@ -61,12 +61,16 @@ impl GameData for SpawnData {
                             }
                             self.game_data = Some(game_data);
                         } else {
-                            let mut vote_ban_system = inner::objects::inner_net_objects::VoteBanSystem {
-                                net_id,
-                                initial_spawn: true,
-                                votes: HashMap::new(),
-                            };
-                            info!("Vote Ban System Deserialized Net ID: {:?}", vote_ban_system.net_id);
+                            let mut vote_ban_system =
+                                inner::objects::inner_net_objects::VoteBanSystem {
+                                    net_id,
+                                    initial_spawn: true,
+                                    votes: HashMap::new(),
+                                };
+                            info!(
+                                "Vote Ban System Deserialized Net ID: {:?}",
+                                vote_ban_system.net_id
+                            );
                             if hazel_inner.as_ref().unwrap().length > 0 {
                                 vote_ban_system.deserialize(&mut hazel_inner.unwrap());
                             }
@@ -81,7 +85,10 @@ impl GameData for SpawnData {
                                 is_new: false,
                                 player_id: 0,
                             };
-                            info!("Player Control Deserialized Net ID: {:?}", player_control.net_id);
+                            info!(
+                                "Player Control Deserialized Net ID: {:?}",
+                                player_control.net_id
+                            );
                             if hazel_inner.as_ref().unwrap().length > 0 {
                                 player_control.deserialize(&mut hazel_inner.unwrap());
                             }
@@ -94,7 +101,10 @@ impl GameData for SpawnData {
             println!("-----------");
         }
 
-        println!("Spawn ID {:?}; Owner ID {:?}; Flags {:?}; Components {:?}", spawn_id, owner_id, flags, components);
+        println!(
+            "Spawn ID {:?}; Owner ID {:?}; Flags {:?}; Components {:?}",
+            spawn_id, owner_id, flags, components
+        );
         println!("-----------------------------------------");
     }
 
@@ -103,10 +113,18 @@ impl GameData for SpawnData {
             self.game_data.as_ref().unwrap().to_owned().process(room);
         }
         if self.vote_ban_system != None {
-            self.vote_ban_system.as_ref().unwrap().to_owned().process(room);
+            self.vote_ban_system
+                .as_ref()
+                .unwrap()
+                .to_owned()
+                .process(room);
         }
         if self.player_control != None {
-            self.player_control.as_ref().unwrap().to_owned().process(room);
+            self.player_control
+                .as_ref()
+                .unwrap()
+                .to_owned()
+                .process(room);
         }
     }
 

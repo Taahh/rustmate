@@ -31,8 +31,6 @@ use tracing::field::debug;
 use tracing::{debug, error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-
-
 #[path = "./manager/manager.rs"]
 mod manager;
 
