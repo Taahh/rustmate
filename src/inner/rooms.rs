@@ -1,16 +1,21 @@
 use crate::util::inner::GameCode;
-use crate::{Packet, User};
+use crate::{Buffer, Packet, User};
 use lazy_static::lazy_static;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
+use std::marker::PhantomData;
+use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, MutexGuard};
 use tracing::info;
+use crate::inner::objects::inner_net_objects::{GameData, VoteBanSystem};
 
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct GameRoom {
     pub code: GameCode,
     pub players: HashMap<i32, Option<User>>,
+    pub game_data: Option<GameData>,
+    pub vote_ban_system: Option<VoteBanSystem>,
     pub host: i32,
 }
 
@@ -21,12 +26,10 @@ impl GameRoom {
         let room = Some(GameRoom {
             code: inside.unwrap().clone(),
             players: HashMap::new(),
+            game_data: None,
+            vote_ban_system: None,
             host: -1,
         });
-        /*ROOMS
-        .lock()
-        .unwrap()
-        .insert(code_option.unwrap(), room.clone());*/
         get_rooms().insert(code_option.unwrap(), room.to_owned());
         return room.unwrap();
     }
@@ -56,6 +59,25 @@ impl GameRoom {
             x.as_ref()
                 .unwrap()
                 .send_reliable_packet(packet.clone(), socket)
+        }
+    }
+
+    pub fn forward_packet_to_all(&self, buffer: Buffer, socket: &UdpSocket) {
+        for x in self.players.values() {
+            x.as_ref().unwrap().forward_packet(buffer.clone(), socket)
+        }
+    }
+
+    pub fn forward_packet_to_all_but(&self, buffer: Buffer, socket: &UdpSocket, exclude: &[i32]) {
+        for x in self.players.values() {
+            if x.as_ref().unwrap().player == None {
+                continue;
+            }
+            if exclude.contains(&x.as_ref().unwrap().player.as_ref().unwrap().id) {
+                continue;
+            }
+            info!("NOT SKIPPING: {:?}", x.as_ref().unwrap().username);
+            x.as_ref().unwrap().forward_packet(buffer.clone(), socket)
         }
     }
 }

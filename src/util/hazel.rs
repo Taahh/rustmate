@@ -1,6 +1,7 @@
+use tracing::info;
 use crate::util::buffer::Buffer;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct HazelMessage {
     pub length: u16,
     pub tag: u8,
@@ -8,15 +9,25 @@ pub struct HazelMessage {
 }
 
 impl HazelMessage {
-    pub fn read_message(buffer: &mut Buffer) -> Self {
-        let length = buffer.read_u16();
+    pub fn read_message(buffer: &mut Buffer) -> Option<Self> {
+        if buffer.position >= buffer.array.len() {
+            return None;
+        }
+        let length = buffer.read_u16_le();
+        if buffer.position >= buffer.array.len() {
+            return None;
+        }
         let tag = buffer.read_u8();
-        let mut newBuffer = Buffer::new(buffer);
-        HazelMessage {
+        if buffer.position >= buffer.array.len() {
+            return None;
+        }
+        let mut newBuffer = buffer.clone();
+        buffer.position += length as usize;
+        Some(HazelMessage {
             length,
             tag,
             buffer: newBuffer,
-        }
+        })
     }
 
     pub fn start_message(tag: u8) -> Self {

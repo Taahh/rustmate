@@ -1,12 +1,14 @@
 use crate::connections::update_user;
-use crate::protocol::reliable_packets::{GameDataPacket, HostGamePacket, JoinGamePacket, ReactorHandshakePacket};
+use crate::inner::rooms::get_rooms;
+use crate::protocol::reliable_packets::{
+    GameDataPacket, HostGamePacket, JoinGamePacket, ReactorHandshakePacket,
+};
 use crate::structs::structs::PlatformSpecificData;
 use crate::util::hazel::HazelMessage;
 use crate::{get_users, Buffer, User, CONNECTIONS};
 use tokio::net::UdpSocket;
 use tracing::info;
 use tracing::log::{debug, log};
-use crate::inner::rooms::get_rooms;
 
 pub trait Packet {
     fn deserialize(&mut self, buffer: &mut Buffer);
@@ -29,12 +31,19 @@ pub struct HelloPacket {
     pub lastLanguage: Option<u32>,
     pub chatMode: Option<i8>,
     pub platformData: Option<PlatformSpecificData>,
-    pub modded: bool
+    pub modded: bool,
 }
 
 #[derive(Debug)]
 pub struct ReliablePacket {
     pub nonce: u16,
+    pub reliable_packet_id: Option<u8>,
+    pub hazel_message: Option<HazelMessage>,
+    pub buffer: Buffer,
+}
+
+#[derive(Debug)]
+pub struct NormalPacket {
     pub reliable_packet_id: Option<u8>,
     pub hazel_message: Option<HazelMessage>,
     pub buffer: Buffer,
@@ -70,17 +79,18 @@ impl Packet for HelloPacket {
         self.lastNonce = Some(buffer.read_u32());
         self.lastLanguage = Some(buffer.read_u32());
         self.chatMode = Some(buffer.read_i8());
-        let mut platformData = HazelMessage::read_message(buffer);
+        info!("remaining buffer: {:?}", &buffer.array[buffer.position..]);
+        let mut platformData = HazelMessage::read_message(buffer).unwrap();;
+        info!("data length: {:?}", platformData.length);
         self.platformData = Some(PlatformSpecificData {
             platform: platformData.tag,
             platformName: platformData.buffer.read_string(),
         });
+        info!("remaining bufferafter : {:?}", &buffer.array[buffer.position..]);
         buffer.read_string();
         buffer.read_u32();
         if buffer.position < buffer.array.len() {
             info!("REACTOR HANDSHAKE!");
-            buffer.read_i8();
-            // todo!("Come back to this because there may be a byte I forgot to read after the uint 32 read");
             info!("Reactor Initial Version: {:?}", buffer.read_i8());
             info!("Reactor Mod Count: {:?}", buffer.read_packed_uint_32());
             self.modded = true;
@@ -108,7 +118,7 @@ impl Packet for ReliablePacket {
     fn deserialize(&mut self, buffer: &mut Buffer) {
         let pos = buffer.position;
         info!("Hazel: {:?}", &buffer.array[pos..]);
-        let reliable_hazel = HazelMessage::read_message(buffer);
+        let reliable_hazel = HazelMessage::read_message(buffer).unwrap();;
         let reliable_packet_id = reliable_hazel.tag;
         self.reliable_packet_id = Some(reliable_packet_id);
         self.hazel_message = Some(reliable_hazel);
@@ -132,11 +142,63 @@ impl Packet for ReliablePacket {
             packet.process(user, socket);
         } else if id == 1 {
             info!("Reliable Join Game Packet");
-            let mut join_game = JoinGamePacket { code: None, joining: None, host: None, room: None };
+            let mut join_game = JoinGamePacket {
+                code: None,
+                joining: None,
+                host: None,
+                room: None,
+            };
             join_game.deserialize(&mut self.hazel_message.unwrap().buffer);
             join_game.process(user, socket);
         } else if id == 5 {
             info!("Reliable Game Data Packet");
+            let mut game_data = GameDataPacket {
+                code: None,
+                buffer: self.buffer,
+            };
+            game_data.deserialize(&mut self.hazel_message.unwrap().buffer);
+            game_data.process(user, socket);
+        }
+    }
+}
+
+impl Packet for NormalPacket {
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+        let pos = buffer.position;
+        info!("Hazel: {:?}", &buffer.array[pos..]);
+        let reliable_hazel = HazelMessage::read_message(buffer).unwrap();;
+        let reliable_packet_id = reliable_hazel.tag;
+        self.reliable_packet_id = Some(reliable_packet_id);
+        self.hazel_message = Some(reliable_hazel);
+        let pos = buffer.position;
+        info!("Hazel: {:?}", &buffer.array[pos..]);
+    }
+
+    fn serialize(self, buffer: &mut Buffer) {}
+
+    fn process(self, user: &mut &User, socket: &UdpSocket) {
+        info!(
+            "Handling normal packet {:?}",
+            self.reliable_packet_id.unwrap()
+        );
+        let id = self.reliable_packet_id.unwrap();
+        if id == 0 {
+            info!("Reliable Host Game Packet");
+            let mut packet = HostGamePacket { code: None };
+            packet.deserialize(&mut self.hazel_message.unwrap().buffer);
+            packet.process(user, socket);
+        } else if id == 1 {
+            info!("Reliable Join Game Packet");
+            let mut join_game = JoinGamePacket {
+                code: None,
+                joining: None,
+                host: None,
+                room: None,
+            };
+            join_game.deserialize(&mut self.hazel_message.unwrap().buffer);
+            join_game.process(user, socket);
+        } else if id == 5 {
+            info!("Normal Game Data Packet");
             let mut game_data = GameDataPacket {
                 code: None,
                 buffer: self.buffer,

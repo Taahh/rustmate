@@ -1,7 +1,7 @@
 use std::mem::transmute;
 use tracing::debug;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Buffer {
     pub position: usize,
     pub array: Vec<u8>,
@@ -113,18 +113,7 @@ impl Buffer {
         }
     }
     pub fn write_packed_i32(&mut self, i: i32) {
-        let mut value = i;
-        loop {
-            let mut b = (i & 0xFF) as u8;
-            if value >= 0x80 {
-                b |= 0x80;
-            }
-            self.write_u8(b);
-            value >>= 7;
-            if value <= 0 {
-                break;
-            }
-        }
+        self.write_packed_u32((i >> 0) as u32);
     }
 
     pub fn write_string(&mut self, str: String) {
@@ -200,12 +189,78 @@ impl Buffer {
         return i64::from_be_bytes(array.try_into().unwrap());
     }
 
+
+    pub fn read_i8_le(&mut self) -> i8 {
+        let position = self.position;
+        self.position += 1;
+        let array: &[u8] = &self.array[position..self.position];
+        return i8::from_le_bytes(array.try_into().unwrap());
+    }
+
+    pub fn read_u8_le(&mut self) -> u8 {
+        let position = self.position;
+        self.position += 1;
+        let array: &[u8] = &self.array[position..self.position];
+        return u8::from_le_bytes(array.try_into().unwrap());
+    }
+
+    pub fn read_i16_le(&mut self) -> i16 {
+        let position = self.position;
+        self.position += 2;
+        let array: &[u8] = &self.array[position..self.position];
+        return i16::from_le_bytes(array.try_into().unwrap());
+    }
+
+    pub fn read_u16_le(&mut self) -> u16 {
+        let position = self.position;
+        self.position += 2;
+        let array: &[u8] = &self.array[position..self.position];
+        return u16::from_le_bytes(array.try_into().unwrap());
+    }
+
+    pub fn read_i32_le(&mut self) -> i32 {
+        let position = self.position;
+        self.position += 4;
+        let array: &[u8] = &self.array[position..self.position];
+        let mut empty_bytes: [u8; 4] = [0; 4];
+        for i in 0..array.len() {
+            empty_bytes[i] = array[i];
+        }
+        unsafe { transmute::<[u8; 4], i32>(empty_bytes) }
+    }
+    pub fn read_u32_le(&mut self) -> u32 {
+        let position = self.position;
+        self.position += 4;
+        let array = &self.array[position..self.position];
+        let mut empty_bytes: [u8; 4] = [0; 4];
+        for i in 0..array.len() {
+            empty_bytes[i] = array[i];
+        }
+        unsafe { transmute::<[u8; 4], u32>(empty_bytes) }
+    }
+
+    pub fn read_f32_le(&mut self) -> f32 {
+        let position = self.position;
+        self.position += 4;
+        let array: &[u8] = &self.array[position..self.position];
+        return f32::from_le_bytes(array.try_into().unwrap());
+    }
+
+    pub fn read_i64_le(&mut self) -> i64 {
+        let position = self.position;
+        self.position += 8;
+        let array: &[u8] = &self.array[position..self.position];
+        return i64::from_le_bytes(array.try_into().unwrap());
+    }
+
+
     pub fn read_string(&mut self) -> String {
         let length = self.read_packed_uint_32();
+        println!("length: {:?}", length);
         let position = self.position;
         self.position += length as usize;
         let array: &[u8] = &self.array[position..self.position];
-        return String::from_utf8(array.try_into().unwrap()).unwrap();
+        return String::from_utf8(array.try_into().unwrap()).unwrap_or("N/A".to_string());
     }
 
     pub fn read_bool(&mut self) -> bool {
@@ -229,6 +284,29 @@ impl Buffer {
             output |= byte.checked_shl(shift).unwrap_or(0) as u32;
             shift += 7;
         }
+        return output;
+    }
+
+    pub fn read_packed_int_32(&mut self) -> i32 {
+        let mut output: i32 = 0;
+        let mut shift = 0;
+        let mut read_more = true;
+        while read_more {
+            let mut byte = self.read_u8();
+            let read = (byte >> 7) & 1;
+            let val = if read != 0 { (byte ^ 0x80 )as i32 } else { byte as i32 };
+            if val != 0 {
+                output |= (val << (shift * 7)) as i32;
+            } else if read != 0 {
+                output <<= shift * 7;
+            }
+
+            if read == 0 {
+                read_more = false;
+                break;
+            }
+            shift += 1;
+        };
         return output;
     }
 
