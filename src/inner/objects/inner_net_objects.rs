@@ -1,12 +1,11 @@
+use crate::inner::rooms::{get_rooms, GameRoom, ROOMS};
+use crate::inner::structs::player::PlayerInfo;
+use crate::util::hazel::HazelMessage;
+use crate::Buffer;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::DerefMut;
 use tracing::info;
-use crate::Buffer;
-use crate::inner::rooms::{GameRoom, get_rooms, ROOMS};
-use crate::inner::structs::player::PlayerInfo;
-use crate::util::hazel::HazelMessage;
-
 
 pub trait InnerNetObject {
     fn deserialize(&mut self, hazel_msg: &mut HazelMessage);
@@ -33,13 +32,13 @@ pub struct PlayerControl {
     pub net_id: u32,
     pub initial_spawn: bool,
     pub is_new: bool,
-    pub player_id: u8
+    pub player_id: u8,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlayerPhysics {
     pub net_id: u32,
-    pub initial_spawn: bool
+    pub initial_spawn: bool,
 }
 
 impl InnerNetObject for GameData {
@@ -54,7 +53,10 @@ impl InnerNetObject for GameData {
             info!("Player Tag: {:?}", hazel_msg_actual.tag);
             let tag = &hazel_msg_actual.tag;
             if self.all_players.contains_key(tag) {
-                self.all_players.get_mut(tag).unwrap().deserialize(&mut hazel_msg_actual.buffer);
+                self.all_players
+                    .get_mut(tag)
+                    .unwrap()
+                    .deserialize(&mut hazel_msg_actual.buffer);
             } else {
                 let mut info = PlayerInfo::new();
                 info.deserialize(&mut hazel_msg_actual.buffer);
@@ -71,10 +73,22 @@ impl InnerNetObject for GameData {
 
         if self.initial_spawn {
             game_data.initial_spawn = false;
-            get_rooms().get_mut(&code).unwrap().as_mut().unwrap().game_data = Some(game_data);
+            get_rooms()
+                .get_mut(&code)
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .game_data = Some(game_data);
         } else {
             tokio::spawn(async move {
-                ROOMS.lock().await.get_mut(&code).unwrap().as_mut().unwrap().game_data = Some(game_data);
+                ROOMS
+                    .lock()
+                    .await
+                    .get_mut(&code)
+                    .unwrap()
+                    .as_mut()
+                    .unwrap()
+                    .game_data = Some(game_data);
                 println!("game data done");
             });
         }
@@ -103,10 +117,22 @@ impl InnerNetObject for VoteBanSystem {
         let code = room.to_owned().code;
         if self.initial_spawn {
             vote_ban_system.initial_spawn = false;
-            get_rooms().get_mut(&code).unwrap().as_mut().unwrap().vote_ban_system = Some(vote_ban_system);
+            get_rooms()
+                .get_mut(&code)
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .vote_ban_system = Some(vote_ban_system);
         } else {
             tokio::spawn(async move {
-                ROOMS.lock().await.get_mut(&code).unwrap().as_mut().unwrap().vote_ban_system = Some(vote_ban_system);
+                ROOMS
+                    .lock()
+                    .await
+                    .get_mut(&code)
+                    .unwrap()
+                    .as_mut()
+                    .unwrap()
+                    .vote_ban_system = Some(vote_ban_system);
             });
         }
     }
@@ -130,18 +156,33 @@ impl InnerNetObject for PlayerControl {
         let mut rooms = get_rooms();
         let room = rooms.get_mut(&code).unwrap().as_mut().unwrap();
         println!("room: {:?}", room);
-        if room.game_data.as_mut().unwrap().all_players.contains_key(&id) {
+        if room
+            .game_data
+            .as_mut()
+            .unwrap()
+            .all_players
+            .contains_key(&id)
+        {
             player_control.initial_spawn = false;
-            room.game_data.as_mut().unwrap().all_players.get_mut(&id).unwrap().player_control = Some(player_control);
+            room.game_data
+                .as_mut()
+                .unwrap()
+                .all_players
+                .get_mut(&id)
+                .unwrap()
+                .player_control = Some(player_control);
         } else {
-            room.game_data.as_mut().unwrap().all_players.insert(id, PlayerInfo {
-                outfits: HashMap::new(),
-                level: 0,
-                disconnected: false,
-                dead: false,
-                player_control: Some(player_control),
-                player_physics: None
-            });
+            room.game_data.as_mut().unwrap().all_players.insert(
+                id,
+                PlayerInfo {
+                    outfits: HashMap::new(),
+                    level: 0,
+                    disconnected: false,
+                    dead: false,
+                    player_control: Some(player_control),
+                    player_physics: None,
+                },
+            );
         }
 
         println!("UPDATED ROOM");
@@ -151,8 +192,7 @@ impl InnerNetObject for PlayerControl {
 }
 
 impl InnerNetObject for PlayerPhysics {
-    fn deserialize(&mut self, hazel_msg: &mut HazelMessage) {
-    }
+    fn deserialize(&mut self, hazel_msg: &mut HazelMessage) {}
 
     fn process(&mut self, room: &mut GameRoom) {
         let mut player_physics = self.to_owned();

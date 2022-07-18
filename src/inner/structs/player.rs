@@ -1,8 +1,8 @@
+use crate::inner::objects::inner_net_objects::{PlayerControl, PlayerPhysics};
+use crate::Buffer;
 use std::collections::HashMap;
 use std::mem::transmute;
 use tracing::log::info;
-use crate::Buffer;
-use crate::inner::objects::inner_net_objects::{PlayerControl, PlayerPhysics};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum PlayerOutfitType {
@@ -16,8 +16,8 @@ pub struct PlayerInfo {
     pub level: u32,
     pub disconnected: bool,
     pub dead: bool,
-    pub player_control: Option<PlayerControl>
-    pub player_physics: Option<PlayerPhysics>
+    pub player_control: Option<PlayerControl>,
+    pub player_physics: Option<PlayerPhysics>,
 }
 
 // #[derive(Clone, Debug)]
@@ -65,7 +65,7 @@ impl PlayerInfo {
             disconnected: false,
             dead: false,
             player_control: None,
-            player_physics: None
+            player_physics: None,
         }
     }
     pub fn deserialize(&mut self, buffer: &mut Buffer) {
@@ -73,15 +73,13 @@ impl PlayerInfo {
         println!("outfits: {:?}", byte);
         self.outfits.clear();
         for i in 0..byte {
-            let outfit_type: PlayerOutfitType = unsafe {
-                transmute(buffer.read_i8())
-            };
+            let outfit_type: PlayerOutfitType = unsafe { transmute(buffer.read_i8()) };
             println!("outfit_type: {:?}", outfit_type);
             println!("buffer: {:?}", buffer);
             let outfit = PlayerOutfit::deserialize(buffer);
             println!("OUTFIT: {:?}", outfit);
             self.outfits.insert(outfit_type, outfit);
-        };
+        }
         self.level = buffer.read_packed_uint_32();
         let flags = buffer.read_i8_le();
         self.disconnected = (flags & 1) != 0;

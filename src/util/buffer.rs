@@ -189,7 +189,6 @@ impl Buffer {
         return i64::from_be_bytes(array.try_into().unwrap());
     }
 
-
     pub fn read_i8_le(&mut self) -> i8 {
         let position = self.position;
         self.position += 1;
@@ -253,7 +252,6 @@ impl Buffer {
         return i64::from_le_bytes(array.try_into().unwrap());
     }
 
-
     pub fn read_string(&mut self) -> String {
         let length = self.read_packed_uint_32();
         println!("length: {:?}", length);
@@ -294,7 +292,11 @@ impl Buffer {
         while read_more {
             let mut byte = self.read_u8();
             let read = (byte >> 7) & 1;
-            let val = if read != 0 { (byte ^ 0x80 )as i32 } else { byte as i32 };
+            let val = if read != 0 {
+                (byte ^ 0x80) as i32
+            } else {
+                byte as i32
+            };
             if val != 0 {
                 output |= (val << (shift * 7)) as i32;
             } else if read != 0 {
@@ -306,7 +308,7 @@ impl Buffer {
                 break;
             }
             shift += 1;
-        };
+        }
         return output;
     }
 
