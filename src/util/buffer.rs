@@ -35,6 +35,13 @@ impl Buffer {
         }
     }
 
+    pub fn write_u8_arr(&mut self, i: &[u8]) {
+        let mut arr = i.clone().to_owned();
+        for x in arr {
+            self.write_u8(x);
+        }
+    }
+
     pub fn write_u8_arr_le(&mut self, i: &[u8]) {
         for x in i {
             self.write_u8_le(*x);

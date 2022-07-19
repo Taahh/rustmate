@@ -224,7 +224,7 @@ impl InnerNetObject for PlayerPhysics {
         let room = rooms.get_mut(&code).unwrap().as_mut().unwrap();
         let game_data = room.game_data.as_mut().unwrap();
         for (k, v) in game_data.to_owned().all_players {
-            if v.player_control.as_ref().unwrap().player_physics != None && v.player_control.as_ref().unwrap().player_physics.as_ref().unwrap().net_id == self.net_id {
+            if v.player_control != None && v.player_control.as_ref().unwrap().player_physics != None && v.player_control.as_ref().unwrap().player_physics.as_ref().unwrap().net_id == self.net_id {
                 player_physics.initial_spawn = false;
                 game_data.all_players.get_mut(&v.player_control.as_ref().unwrap().player_id).unwrap().player_control.as_mut().unwrap().player_physics = Some(player_physics);
             }

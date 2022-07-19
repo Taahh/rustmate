@@ -44,6 +44,10 @@ impl GameRoom {
         }
     }
 
+    pub fn send_reliable_to(&self, packet: impl Packet + Clone, socket: &UdpSocket, target: i32) {
+        self.players.get(&target).as_ref().unwrap().as_ref().unwrap().send_reliable_packet(packet.clone(), socket);
+    }
+
     pub fn send_reliable_to_all_but(
         &self,
         packet: impl Packet + Clone,
@@ -68,6 +72,10 @@ impl GameRoom {
         for x in self.players.values() {
             x.as_ref().unwrap().forward_packet(buffer.clone(), socket)
         }
+    }
+
+    pub fn forward_packet_to(&self, buffer: Buffer, socket: &UdpSocket, target: i32) {
+        self.players.get(&target).as_ref().unwrap().as_ref().unwrap().forward_packet(buffer.clone(), socket)
     }
 
     pub fn forward_packet_to_all_but(&self, buffer: Buffer, socket: &UdpSocket, exclude: &[i32]) {

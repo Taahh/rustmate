@@ -40,6 +40,20 @@ pub struct JoinedGamePacket {
 pub struct GameDataPacket {
     pub code: Option<GameCode>,
     pub buffer: Buffer,
+    pub reliable: bool
+}
+
+#[derive(Clone)]
+pub struct GameDataToPacket {
+    pub code: Option<GameCode>,
+    pub target: i32,
+    pub buffer: Buffer,
+}
+
+#[derive(Clone)]
+pub struct StartGamePacket {
+    pub code: Option<GameCode>,
+    pub buffer: Buffer,
 }
 
 pub struct ReactorHandshakePacket;
@@ -319,7 +333,9 @@ impl Packet for GameDataPacket {
     }
 
     fn serialize(self, buffer: &mut Buffer) {
-        buffer.write_u8_arr_le(&*self.buffer.array);
+        let mut arr = self.buffer;
+        arr.position = 3;
+        buffer.write_u8_arr(&arr.array[arr.position..]);
     }
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {
@@ -345,11 +361,29 @@ impl Packet for GameDataPacket {
 
         // info!("HELLO GAME DATA");
 
+        let mut packet = self.to_owned();
+
         // let addr = user.socketAddr;
-        room.as_mut().unwrap().forward_packet_to_all(
-            self.buffer,
-            socket, /*, &[user.player.as_ref().unwrap().id]*/
-        );
+        if packet.reliable {
+            room.as_mut().unwrap().send_reliable_to_all(
+                packet,
+                socket, /*, &[user.player.as_ref().unwrap().id]*/
+            );
+        } else {
+            let mut buffer = Buffer {
+                position: 0,
+                array: Vec::new()
+            };
+            buffer.write_u8(0);
+            // packet.serialize(&mut buffer);
+            let mut buffer_two = self.buffer.clone();
+            buffer_two.position = 1;
+            buffer.write_u8_arr(&buffer_two.array[buffer_two.position..]);
+            room.as_mut().unwrap().forward_packet_to_all(
+                buffer,
+                socket, /*, &[user.player.as_ref().unwrap().id]*/
+            );
+        }
         // get_users();
         // let room = room.clone();
         let id = user.player.as_ref().unwrap().id;
@@ -360,6 +394,152 @@ impl Packet for GameDataPacket {
             let user_mut = user.as_mut().unwrap();
             // send_spawn_message(user_mut, socket, room);
         }
+        /*
+        let socketAddr = user.socketAddr;
+        // gameRoom.unwrap().unwrap().players.*/
+    }
+}
+
+impl Packet for GameDataToPacket {
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+        self.code = Some(GameCode::new_code_int(buffer.read_i32()));
+        info!("Got Game Code: {:?}", self.code);
+        self.target = buffer.read_packed_int_32();
+
+        let mut hazel_buffer = buffer.clone();
+
+        let room = &mut get_rooms()
+            .get_mut(self.code.as_ref().unwrap())
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .to_owned();
+
+        while hazel_buffer.position < hazel_buffer.array.len() {
+            let mut hazel_msg_option = HazelMessage::read_message(buffer);
+            if hazel_msg_option == None {
+                break;
+            }
+            let mut msg = hazel_msg_option.as_mut().unwrap();
+            // hazel_buffer = hazel_msg_option.as_r.unwrap().buffer;
+            hazel_buffer = msg.to_owned().buffer;
+            info!("GAME DATA TAG: {:?}", msg.tag);
+            match msg.tag {
+                0x04 => {
+                    // let hazel_clone = hazel_msg.clone().to_owned();
+                    // hazel_buffer = hazel_clone.buffer;
+                    let mut spawn_data = SpawnData {
+                        game_data: None,
+                        vote_ban_system: None,
+                        player_control: None,
+                        lobby_behavior: None,
+                    };
+                    spawn_data.deserialize(msg);
+                    spawn_data.process(room);
+                }
+                0x01 => {
+                    // let hazel_clone = &mut hazel_msg.clone();
+                    let mut data_data = DataData {
+                        net_id: 0,
+                        hazel_msg: HazelMessage {
+                            length: 0,
+                            tag: 0,
+                            buffer: Buffer {
+                                position: 0,
+                                array: vec![],
+                            },
+                        },
+                    };
+                    data_data.deserialize(msg);
+                    data_data.process(room);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn serialize(self, buffer: &mut Buffer) {
+        let mut arr = self.buffer;
+        arr.position = 3;
+        buffer.write_u8_arr(&arr.array[arr.position..]);
+    }
+
+    fn process(self, user: &mut &User, socket: &UdpSocket) {
+        if !room_exists(self.code.as_ref().unwrap().to_owned()) {
+            info!("Room not found");
+            return;
+        }
+
+        if user.player == None {
+            error!("User for some reason lacks a player object!");
+            return;
+        }
+
+        let mut room = Some(get_rooms()
+            .get(&user.player.as_ref().unwrap().game_code)
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .to_owned());
+
+        // info!("HELLO GAME DATA");
+
+        info!("game data to process");
+        // let addr = user.socketAddr;
+        let packet = self.to_owned();
+        room.as_mut().unwrap().send_reliable_to(
+            packet,
+            socket, /*, &[user.player.as_ref().unwrap().id]*/
+            self.target
+        );
+        /*
+        let socketAddr = user.socketAddr;
+        // gameRoom.unwrap().unwrap().players.*/
+    }
+}
+
+
+impl Packet for StartGamePacket {
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+        self.code = Some(GameCode::new_code_int(buffer.read_i32()));
+    }
+
+    fn serialize(self, buffer: &mut Buffer) {
+        let mut arr = self.buffer;
+        arr.position = 3;
+        buffer.write_u8_arr(&arr.array[arr.position..]);
+    }
+
+    fn process(self, user: &mut &User, socket: &UdpSocket) {
+        if !room_exists(self.code.as_ref().unwrap().to_owned()) {
+            info!("Room not found");
+            return;
+        }
+
+        if user.player == None {
+            error!("User for some reason lacks a player object!");
+            return;
+        }
+
+        let mut room = Some(get_rooms()
+            .get(&user.player.as_ref().unwrap().game_code)
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .to_owned());
+
+        // info!("HELLO GAME DATA");
+
+        info!("game data to process");
+        // let addr = user.socketAddr;
+        let packet = self.to_owned();
+        room.as_mut().unwrap().send_reliable_to_all(
+            packet,
+            socket
+        );
         /*
         let socketAddr = user.socketAddr;
         // gameRoom.unwrap().unwrap().players.*/
