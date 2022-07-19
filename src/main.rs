@@ -30,6 +30,7 @@ use tower_http::trace::TraceLayer;
 use tracing::field::debug;
 use tracing::{debug, error, info, Level};
 use tracing_subscriber::FmtSubscriber;
+use crate::inner::rooms::{room_exists, ROOMS};
 
 #[path = "./manager/manager.rs"]
 mod manager;
@@ -139,6 +140,7 @@ async fn spawn_udp() {
                     packet.process(user, socket.as_ref().unwrap());
                 }
                 info!("user: {:?}", user);
+
             } else {
                 error!("RE INSERTING");
                 let mut user = User::new(Loading, data_address);
@@ -160,6 +162,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     })
     .await
     .expect("Thread panicked");
+
+    tokio::spawn(async move {
+        let users = CONNECTIONS.lock().await;
+        loop {
+            for v in users.values() {
+                println!("user: {:?}", v);
+            }
+        }
+    });
 
     /*tokio::spawn(async move {
         info!("New HTTP Server /127.0.0.1:8082");

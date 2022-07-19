@@ -9,6 +9,8 @@ use std::mem::transmute;
 use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 use tracing::info;
+use crate::inner::rooms::{room_exists, ROOMS};
+use crate::util::util::to_string;
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct User {
@@ -59,7 +61,10 @@ impl User {
         buffer.write_u8(0x01);
         // CONNECTIONS.lock().unwrap().get(&self.socketAddr).unwrap().serverNonce += 1;
         let nonce = self.serverNonce + 1;
+        info!("EXISTING NONCE: {:?}", nonce);
         let addr = self.socketAddr;
+        let username = self.username.as_ref().unwrap_or(&"N/A".to_string()).to_owned();
+        let mut player = self.to_owned().player;
         tokio::spawn(async move {
             CONNECTIONS
                 .lock()
@@ -69,6 +74,16 @@ impl User {
                 .as_mut()
                 .unwrap()
                 .serverNonce += 1;
+            if player != None {
+                println!("PLAYER WAS FOUND DURING NONCE {:?}", nonce);
+                let player_actual = player.as_ref().unwrap().to_owned();
+                let code = player_actual.game_code;
+                if room_exists(code.to_owned()) {
+                    println!("AND PLAYER ROOM EXISTS DURING NONCE {:?}", nonce);
+                    ROOMS.lock().await.get_mut(&code).unwrap().as_mut().unwrap().players.get_mut(&player_actual.id).unwrap().as_mut().unwrap().serverNonce = nonce;
+                }
+            }
+            info!("UPDATED NONCE TO {:?} FOR {:?}", nonce, username);
         });
         // info!("UPDATING USER RELIABLE: {:?}", user_option.as_ref().unwrap());
         buffer.write_u16(nonce);
@@ -79,7 +94,7 @@ impl User {
             "Sending reliable packet to {:?} with length {:?} and buffer {:?}",
             self.username.as_ref().unwrap_or(&"not found".to_string()),
             length,
-            convert(&buffer.array)
+            to_string(convert(&buffer.array))
         );
     }
 

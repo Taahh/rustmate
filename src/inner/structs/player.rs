@@ -16,8 +16,7 @@ pub struct PlayerInfo {
     pub level: u32,
     pub disconnected: bool,
     pub dead: bool,
-    pub player_control: Option<PlayerControl>,
-    pub player_physics: Option<PlayerPhysics>,
+    pub player_control: Option<PlayerControl>
 }
 
 // #[derive(Clone, Debug)]
@@ -64,8 +63,7 @@ impl PlayerInfo {
             level: 0,
             disconnected: false,
             dead: false,
-            player_control: None,
-            player_physics: None,
+            player_control: None
         }
     }
     pub fn deserialize(&mut self, buffer: &mut Buffer) {

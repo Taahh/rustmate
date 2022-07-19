@@ -1,4 +1,4 @@
-use crate::inner::objects::inner_net_objects::{GameData, VoteBanSystem};
+use crate::inner::objects::inner_net_objects::{GameData, LobbyBehavior, VoteBanSystem};
 use crate::util::inner::GameCode;
 use crate::{Buffer, Packet, User};
 use lazy_static::lazy_static;
@@ -16,6 +16,7 @@ pub struct GameRoom {
     pub players: HashMap<i32, Option<User>>,
     pub game_data: Option<GameData>,
     pub vote_ban_system: Option<VoteBanSystem>,
+    pub lobby_behavior: Option<LobbyBehavior>,
     pub host: i32,
 }
 
@@ -28,6 +29,7 @@ impl GameRoom {
             players: HashMap::new(),
             game_data: None,
             vote_ban_system: None,
+            lobby_behavior: None,
             host: -1,
         });
         get_rooms().insert(code_option.unwrap(), room.to_owned());
