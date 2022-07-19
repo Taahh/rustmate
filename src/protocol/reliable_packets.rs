@@ -17,6 +17,7 @@ use tokio::net::UdpSocket;
 use tracing::log::{debug, log};
 use tracing::{error, info};
 use tracing_subscriber::registry::Data;
+use crate::util::util::send_spawn_message;
 
 pub struct HostGamePacket {
     pub code: Option<GameCode>,
@@ -142,7 +143,7 @@ impl Packet for JoinGamePacket {
             .as_ref()
             .unwrap()
             .to_owned();
-        let next_length = room.players.len() + 2;
+        let next_length = room.players.len() + 1;
         let player_option = Some(Player {
             id: next_length as i32,
             game_code: room.clone().code,
@@ -172,6 +173,7 @@ impl Packet for JoinGamePacket {
 
         room.players
             .insert(player_option.clone().unwrap().id, user_option.clone());
+        println!("raaaaoom: {:?}", room);
         let room_clone = Some(room.clone());
         map.insert(
             room_clone.as_ref().unwrap().code.clone(),
@@ -184,6 +186,7 @@ impl Packet for JoinGamePacket {
             packet.host = Some(room_clone.as_ref().unwrap().host);
             packet.joining = user_option.clone();
             packet.room = room_clone.clone();
+            println!("new room: {:?}", room_clone);
             room_clone.as_ref().unwrap().send_reliable_to_all_but(
                 packet,
                 socket,
@@ -197,6 +200,15 @@ impl Packet for JoinGamePacket {
             },
             socket,
         );
+        let address = user.socketAddr;
+        tokio::spawn(async move {
+            let mut users = CONNECTIONS.lock().await;
+            let uzer = users.get_mut(&address).as_mut().unwrap().to_owned().unwrap();
+            if uzer.player != None {
+                let player = uzer.player.as_ref().unwrap().to_owned();
+                ROOMS.lock().await.get_mut(&code).unwrap().as_mut().unwrap().players.get_mut(&player.id).unwrap().as_mut().unwrap().serverNonce = uzer.serverNonce;
+            }
+        });
     }
 }
 
@@ -204,7 +216,8 @@ impl Packet for JoinedGamePacket {
     fn deserialize(&mut self, buffer: &mut Buffer) {}
 
     fn serialize(self, buffer: &mut Buffer) {
-        info!("joined game");
+        info!("joined game for {:?}", self.user);
+        let socketAddr = self.user.socketAddr;
         let mut hazel_message = HazelMessage::start_message(0x07);
         let room = self.room;
         hazel_message.buffer.write_i32_le(room.code.code_int);
@@ -279,6 +292,7 @@ impl Packet for GameDataPacket {
                         game_data: None,
                         vote_ban_system: None,
                         player_control: None,
+                        lobby_behavior: None,
                     };
                     spawn_data.deserialize(msg);
                     spawn_data.process(room);
@@ -321,21 +335,31 @@ impl Packet for GameDataPacket {
             return;
         }
 
-        let room = get_rooms()
+        let mut room = Some(get_rooms()
             .get(&user.player.as_ref().unwrap().game_code)
             .as_ref()
             .unwrap()
             .as_ref()
             .unwrap()
-            .to_owned();
+            .to_owned());
 
         // info!("HELLO GAME DATA");
 
         // let addr = user.socketAddr;
-        room.forward_packet_to_all(
+        room.as_mut().unwrap().forward_packet_to_all(
             self.buffer,
             socket, /*, &[user.player.as_ref().unwrap().id]*/
         );
+        // get_users();
+        // let room = room.clone();
+        let id = user.player.as_ref().unwrap().id;
+        if id != room.as_ref().unwrap().host {
+            // get_users();
+            let room = room.as_ref().unwrap().to_owned();
+            let mut user = room.players.get(&id).as_ref().unwrap().to_owned().to_owned();
+            let user_mut = user.as_mut().unwrap();
+            // send_spawn_message(user_mut, socket, room);
+        }
         /*
         let socketAddr = user.socketAddr;
         // gameRoom.unwrap().unwrap().players.*/

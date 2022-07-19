@@ -1,4 +1,4 @@
-use crate::inner::objects::inner_net_objects::{InnerNetObject, PlayerControl};
+use crate::inner::objects::inner_net_objects::{CustomNetworkTransform, InnerNetObject, LobbyBehavior, PlayerControl, PlayerPhysics};
 use crate::inner::rooms::{get_rooms, GameRoom, ROOMS};
 use crate::util::hazel::HazelMessage;
 use crate::{inner, Buffer};
@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use tracing::info;
+use crate::util::vector::Vector2;
 
 type InnerType = &'static (dyn InnerNetObject + Sync);
 
@@ -15,6 +16,7 @@ pub struct SpawnData {
     pub game_data: Option<inner::objects::inner_net_objects::GameData>,
     pub vote_ban_system: Option<inner::objects::inner_net_objects::VoteBanSystem>,
     pub player_control: Option<PlayerControl>,
+    pub lobby_behavior: Option<LobbyBehavior>
 }
 
 #[derive(Clone)]
@@ -52,6 +54,7 @@ impl GameData for SpawnData {
                         if i == 0 {
                             let mut game_data = inner::objects::inner_net_objects::GameData {
                                 net_id,
+                                owner_id,
                                 initial_spawn: true,
                                 all_players: HashMap::new(),
                             };
@@ -64,6 +67,7 @@ impl GameData for SpawnData {
                             let mut vote_ban_system =
                                 inner::objects::inner_net_objects::VoteBanSystem {
                                     net_id,
+                                    owner_id,
                                     initial_spawn: true,
                                     votes: HashMap::new(),
                                 };
@@ -81,9 +85,12 @@ impl GameData for SpawnData {
                         if i == 0 {
                             let mut player_control = PlayerControl {
                                 net_id,
+                                owner_id,
                                 initial_spawn: true,
                                 is_new: false,
                                 player_id: 0,
+                                player_physics: None,
+                                custom_network_transform: None
                             };
                             info!(
                                 "Player Control Deserialized Net ID: {:?}",
@@ -93,7 +100,48 @@ impl GameData for SpawnData {
                                 player_control.deserialize(&mut hazel_inner.unwrap());
                             }
                             self.player_control = Some(player_control);
+                        } else if i == 1 {
+                            let mut player_physics = PlayerPhysics {
+                                net_id,
+                                initial_spawn: true
+                            };
+                            info!(
+                                "Player Physics Deserialized Net ID: {:?}",
+                                player_physics.net_id
+                            );
+                            if hazel_inner.as_ref().unwrap().length > 0 {
+                                player_physics.deserialize(&mut hazel_inner.unwrap());
+                            }
+                            self.player_control.as_mut().unwrap().player_physics = Some(player_physics);
+                        } else if i == 2 {
+                            let mut custom_network_transform = CustomNetworkTransform {
+                                net_id,
+                                initial_spawn: true,
+                                last_sequence_id: 0,
+                                position: Vector2 { x: 0.0, y: 0.0 },
+                                velocity: Vector2 { x: 0.0, y: 0.0 }
+                            };
+                            info!(
+                                "Custom Network Transform Deserialized Net ID: {:?}",
+                                custom_network_transform.net_id
+                            );
+                            if hazel_inner.as_ref().unwrap().length > 0 {
+                                custom_network_transform.deserialize(&mut hazel_inner.unwrap());
+                            }
+                            self.player_control.as_mut().unwrap().custom_network_transform = Some(custom_network_transform);
                         }
+                    },
+                    2 => {
+                        let mut lobby_behavior = LobbyBehavior {
+                            net_id,
+                            owner_id,
+                            initial_spawn: true
+                        };
+                        info!("Lobby Behavior Deserialized Net ID: {:?}", lobby_behavior.net_id);
+                        if hazel_inner.as_ref().unwrap().length > 0 {
+                            lobby_behavior.deserialize(&mut hazel_inner.unwrap());
+                        }
+                        self.lobby_behavior = Some(lobby_behavior);
                     }
                     _ => {}
                 }
@@ -119,12 +167,26 @@ impl GameData for SpawnData {
                 .to_owned()
                 .process(room);
         }
+        if self.lobby_behavior != None {
+            self.lobby_behavior
+                .as_ref()
+                .unwrap()
+                .to_owned()
+                .process(room);
+        }
         if self.player_control != None {
             self.player_control
                 .as_ref()
                 .unwrap()
                 .to_owned()
                 .process(room);
+            info!("processing player control {:?}", self.player_control);
+            if self.player_control.as_ref().unwrap().player_physics != None {
+                self.player_control.as_ref().unwrap().player_physics.as_ref().unwrap().to_owned().process(room);
+            }
+            if self.player_control.as_ref().unwrap().custom_network_transform != None {
+                self.player_control.as_ref().unwrap().custom_network_transform.as_ref().unwrap().to_owned().process(room);
+            }
         }
     }
 
@@ -142,6 +204,7 @@ impl GameData for DataData {
     }
 
     fn process(&mut self, room: &mut GameRoom) {
+        info!("data room: {:?}", room);
         let code = room.to_owned().code;
         let mut hazel_msg = self.clone().hazel_msg;
         let net_id = self.net_id;
@@ -167,6 +230,27 @@ impl GameData for DataData {
                                 player_control.deserialize(&mut hazel_msg);
                             }
                             player_control.process(room);
+                        }
+                        if player_control.player_physics != None {
+                            let player_physics = player_control.player_physics.as_mut().unwrap();
+                            if player_physics.net_id == net_id {
+                                info!("UPDATING PLAYER PHYSICS");
+                                if hazel_msg.length > 0 {
+                                    player_physics.deserialize(&mut hazel_msg);
+                                }
+                                player_physics.process(room);
+                            }
+                        }
+
+                        if player_control.custom_network_transform != None {
+                            let custom_network_transform = player_control.custom_network_transform.as_mut().unwrap();
+                            if custom_network_transform.net_id == net_id {
+                                info!("UPDATING PLAYER CUSTOM NETWORK TRANSFORM");
+                                if hazel_msg.length > 0 {
+                                    custom_network_transform.deserialize(&mut hazel_msg);
+                                }
+                                custom_network_transform.process(room);
+                            }
                         }
                     }
                 }
