@@ -8,7 +8,7 @@ use crate::protocol::packet::{
     DisconnectPacket, HelloPacket, NormalPacket, Packet, PingPacket, ReliablePacket,
 };
 use crate::util::buffer::Buffer;
-use crate::util::util::convert;
+use crate::util::util::{convert, to_string};
 use axum::body::Body;
 use axum::http::Request;
 use axum::response::Response;
@@ -80,7 +80,7 @@ async fn spawn_udp() {
             .await
             .unwrap();
         let spliced_buffer = &raw_buffer[..length];
-        println!("{:?}", convert(spliced_buffer));
+        println!("{:?}", to_string(convert(spliced_buffer)));
 
         let mut buffer = Buffer {
             position: 0,
