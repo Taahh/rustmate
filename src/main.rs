@@ -18,6 +18,7 @@ use lazy_static::lazy_static;
 use std::borrow::{Borrow, BorrowMut};
 use std::error::Error;
 use std::net::SocketAddr;
+use std::process::exit;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
@@ -65,89 +66,12 @@ lazy_static! {
 
 #[tokio::main]
 async fn spawn_udp() {
-    let addr = SocketAddr::from_str("127.0.0.1:22023").unwrap();
-    // let http_addr = SocketAddr::from_str("127.0.0.1:8082").unwrap();
-    let socket = UdpSocket::bind(&addr).await;
-    info!("Created new thread for UDP Socket");
-    info!("Server started, listening for udp connections on /127.0.0.1:22023");
-    loop {
-        let mut raw_buffer: [u8; 2048] = [0; 2048];
 
-        let (length, data_address) = socket
-            .as_ref()
-            .unwrap()
-            .recv_from(&mut raw_buffer)
-            .await
-            .unwrap();
-        let spliced_buffer = &raw_buffer[..length];
-        println!("{:?}", to_string(convert(spliced_buffer)));
+}
 
-        let mut buffer = Buffer {
-            position: 0,
-            array: Vec::from(spliced_buffer),
-        };
-        let packet_type: u8 = buffer.read_u8();
+#[tokio::main]
+async fn listen_for_stop() {
 
-        debug!("Received packet type {:?}", packet_type);
-
-        unsafe {
-            let mut map = CONNECTIONS.lock().await;
-            if map.contains_key(&data_address) {
-                let mut userRef = map.get(&data_address).unwrap().as_ref();
-                let user = userRef.as_mut().unwrap();
-                if packet_type == 8 {
-                    let mut packet = HelloPacket {
-                        nonce: buffer.read_u16(),
-                        version: None,
-                        username: None,
-                        lastNonce: None,
-                        lastLanguage: None,
-                        chatMode: None,
-                        platformData: None,
-                        modded: false,
-                    };
-                    packet.deserialize(&mut buffer);
-                    packet.process(user, socket.as_ref().unwrap());
-                } else if packet_type == 1 {
-                    let mut packet = ReliablePacket {
-                        nonce: buffer.read_u16(),
-                        reliable_packet_id: None,
-                        hazel_message: None,
-                        buffer: buffer.clone(),
-                    };
-                    packet.deserialize(&mut buffer);
-                    packet.process(user, socket.as_ref().unwrap());
-                } else if packet_type == 0 {
-                    let mut packet = NormalPacket {
-                        reliable_packet_id: None,
-                        hazel_message: None,
-                        buffer: buffer.clone(),
-                    };
-                    packet.deserialize(&mut buffer);
-                    packet.process(user, socket.as_ref().unwrap());
-                } else if packet_type == 12 {
-                    let mut packet = PingPacket {
-                        nonce: buffer.read_u16(),
-                    };
-                    packet.deserialize(&mut buffer);
-                    packet.process(user, socket.as_ref().unwrap());
-                } else if packet_type == 9 {
-                    let mut packet = DisconnectPacket {
-                        disconnect_type: None,
-                        reason: None,
-                    };
-                    packet.deserialize(&mut buffer);
-                    packet.process(user, socket.as_ref().unwrap());
-                }
-                info!("user: {:?}", user);
-
-            } else {
-                error!("RE INSERTING");
-                let mut user = User::new(Loading, data_address);
-                map.insert(data_address, Some(user));
-            }
-        }
-    }
 }
 
 #[tokio::main]
@@ -157,21 +81,115 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("Setting default subscriber failed");
 
-    tokio::task::spawn_blocking(|| {
-        spawn_udp();
-    })
-    .await
-    .expect("Thread panicked");
 
-    tokio::spawn(async move {
-        let users = CONNECTIONS.lock().await;
+    tokio::spawn(async {
+        let addr = SocketAddr::from_str("127.0.0.1:22023").unwrap();
+        // let http_addr = SocketAddr::from_str("127.0.0.1:8082").unwrap();
+        let mut socket = UdpSocket::bind(&addr).await;
+        info!("Created new thread for UDP Socket");
+        info!("Server started, listening for udp connections on /127.0.0.1:22023");
         loop {
-            for v in users.values() {
-                println!("user: {:?}", v);
+            let mut raw_buffer: [u8; 2048] = [0; 2048];
+
+            let (length, data_address) = socket
+                .as_ref()
+                .unwrap()
+                .recv_from(&mut raw_buffer)
+                .await
+                .unwrap();
+            let spliced_buffer = &raw_buffer[..length];
+            println!("{:?}", to_string(convert(spliced_buffer)));
+
+            let mut buffer = Buffer {
+                position: 0,
+                array: Vec::from(spliced_buffer),
+            };
+            let packet_type: u8 = buffer.read_u8();
+
+            debug!("Received packet type {:?}", packet_type);
+
+            unsafe {
+                let mut map = CONNECTIONS.lock().await;
+                if map.contains_key(&data_address) {
+                    let mut userRef = map.get(&data_address).unwrap().as_ref();
+                    let user = userRef.as_mut().unwrap();
+                    if packet_type == 8 {
+                        let mut packet = HelloPacket {
+                            nonce: buffer.read_u16(),
+                            version: None,
+                            username: None,
+                            lastNonce: None,
+                            lastLanguage: None,
+                            chatMode: None,
+                            platformData: None,
+                            modded: false,
+                        };
+                        packet.deserialize(&mut buffer);
+                        packet.process(user, socket.as_ref().unwrap());
+                    } else if packet_type == 1 {
+                        let mut packet = ReliablePacket {
+                            nonce: buffer.read_u16(),
+                            reliable_packet_id: None,
+                            hazel_message: None,
+                            buffer: buffer.clone(),
+                        };
+                        packet.deserialize(&mut buffer);
+                        packet.process(user, socket.as_ref().unwrap());
+                    } else if packet_type == 0 {
+                        let mut packet = NormalPacket {
+                            reliable_packet_id: None,
+                            hazel_message: None,
+                            buffer: buffer.clone(),
+                        };
+                        packet.deserialize(&mut buffer);
+                        packet.process(user, socket.as_ref().unwrap());
+                    } else if packet_type == 12 {
+                        let mut packet = PingPacket {
+                            nonce: buffer.read_u16(),
+                        };
+                        packet.deserialize(&mut buffer);
+                        packet.process(user, socket.as_ref().unwrap());
+                    } else if packet_type == 9 {
+                        let mut packet = DisconnectPacket {
+                            disconnect_type: None,
+                            reason: None,
+                        };
+                        packet.deserialize(&mut buffer);
+                        packet.process(user, socket.as_ref().unwrap());
+                    }
+                    info!("user: {:?}", user);
+
+                } else {
+                    error!("RE INSERTING");
+                    let mut user = User::new(Loading, data_address);
+                    map.insert(data_address, Some(user));
+                }
             }
         }
     });
+    /*tokio::spawn(async {
+        match tokio::signal::ctrl_c().await {
+            Ok(_) => {
+                let rooms = ROOMS.lock().await;
+                for v in rooms.values() {
+                    let v = v.to_owned().as_ref().unwrap().to_owned();
+                    for c in v.players.values() {
+                        let c = c.as_ref().unwrap().to_owned();
+                        c.send_disconnect()
+                    }
+                }
+                exit(2);
+            }
+            Err(_) => {}
+        }
+    });*/
 
+    /*tokio::s {
+
+
+    })
+    .await
+    .expect("Thread panicked");*/
     /*tokio::spawn(async move {
         info!("New HTTP Server /127.0.0.1:8082");
         let service = Router::new()
@@ -188,7 +206,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .expect("HTTP Server Error");
     });*/
 
-    loop {}
+    loop {
+
+    }
 
     Ok(())
 }

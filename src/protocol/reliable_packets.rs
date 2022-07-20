@@ -1,8 +1,6 @@
 use crate::connections::update_user;
 use crate::game_data::game_data::{DataData, GameData, SpawnData};
-use crate::inner::rooms::{
-    get_rooms, room_exists, update_room, update_room_callback, GameRoom, ROOMS,
-};
+use crate::inner::rooms::{get_rooms, room_exists, update_room, update_room_callback, GameRoom, ROOMS, GameState};
 use crate::manager::user::Player;
 use crate::structs::structs::{GameOptionsData, PlatformSpecificData};
 use crate::util::hazel::HazelMessage;
@@ -17,6 +15,7 @@ use tokio::net::UdpSocket;
 use tracing::log::{debug, log};
 use tracing::{error, info};
 use tracing_subscriber::registry::Data;
+use crate::inner::rooms::GameState::NotStarted;
 use crate::util::util::send_spawn_message;
 
 pub struct HostGamePacket {
@@ -55,6 +54,19 @@ pub struct StartGamePacket {
     pub code: Option<GameCode>,
     pub buffer: Buffer,
 }
+
+#[derive(Clone)]
+pub struct EndGamePacket {
+    pub code: Option<GameCode>,
+    pub buffer: Buffer,
+}
+
+#[derive(Clone)]
+pub struct WaitingForHostPacket {
+    pub code: Option<GameCode>,
+    pub client: i32
+}
+
 
 pub struct ReactorHandshakePacket;
 
@@ -157,72 +169,142 @@ impl Packet for JoinGamePacket {
             .as_ref()
             .unwrap()
             .to_owned();
-        let next_length = room.players.len() + 1;
-        let player_option = Some(Player {
-            id: next_length as i32,
-            game_code: room.clone().code,
-        });
 
+        let mut room_clone = Some(room.clone());
         let mut newRoom = false;
+        let mut user_option = Some(user.to_owned().clone());
+        let mut player_option = None;
 
-        if room.players.is_empty() {
-            room.host = player_option.as_ref().unwrap().to_owned().id;
-            newRoom = true;
+        if user.player == None || !room.players.contains_key(&user.player.as_ref().unwrap().id) {
+            let next_length = room.players.len() + 1;
+            player_option = Some(Player {
+                id: next_length as i32,
+                game_code: room.clone().code,
+            });
+
+            if room.players.is_empty() {
+                room.host = player_option.as_ref().unwrap().to_owned().id;
+                newRoom = true;
+            }
+
+            let mut user_mut = user.to_owned();
+            user_mut.player = player_option.clone();
+            user_option = Some(user_mut.clone());
+            let addr = user_option.as_ref().unwrap().socketAddr;
+            tokio::spawn(async move {
+                CONNECTIONS
+                    .lock()
+                    .await
+                    .get_mut(&addr)
+                    .unwrap()
+                    .as_mut()
+                    .unwrap()
+                    .player = user_mut.player;
+            });
+
+            room.players
+                .insert(player_option.clone().unwrap().id, user_option.clone());
+            println!("raaaaoom: {:?}", room);
+            room_clone = Some(room.clone());
+            map.insert(
+                room_clone.as_ref().unwrap().code.clone(),
+                room_clone.clone(),
+            );
+            println!("New player");
+            println!()
+        } else {
+            player_option = user.to_owned().player;
         }
-
-        let mut user_mut = user.to_owned();
-        user_mut.player = player_option.clone();
-        let user_option = Some(user_mut.clone());
-        let addr = user_option.as_ref().unwrap().socketAddr;
-        tokio::spawn(async move {
-            CONNECTIONS
-                .lock()
-                .await
-                .get_mut(&addr)
-                .unwrap()
-                .as_mut()
-                .unwrap()
-                .player = user_mut.player;
-        });
-
-        room.players
-            .insert(player_option.clone().unwrap().id, user_option.clone());
-        println!("raaaaoom: {:?}", room);
-        let room_clone = Some(room.clone());
-        map.insert(
-            room_clone.as_ref().unwrap().code.clone(),
-            room_clone.clone(),
-        );
 
         let code = self.code.as_ref().unwrap().to_owned();
-        if !newRoom {
-            let mut packet = self.clone();
-            packet.host = Some(room_clone.as_ref().unwrap().host);
-            packet.joining = user_option.clone();
-            packet.room = room_clone.clone();
-            println!("new room: {:?}", room_clone);
-            room_clone.as_ref().unwrap().send_reliable_to_all_but(
-                packet,
+
+        info!("ROOM STATE: {:?}", room.state);
+        if room.state == GameState::WaitingForHost {
+            if room.host == player_option.as_ref().unwrap().id {
+                if !newRoom {
+                    let mut packet = self.clone();
+                    packet.host = Some(room_clone.as_ref().unwrap().host);
+                    packet.joining = user_option.clone();
+                    packet.room = room_clone.clone();
+                    println!("new room: {:?}", room_clone);
+                    room_clone.as_ref().unwrap().send_reliable_to_all_but(
+                        packet,
+                        socket,
+                        &[player_option.as_ref().unwrap().id],
+                    );
+                }
+                info!("ROOM: {:?}", room);
+
+                let room_code = room.code;
+
+                tokio::spawn(async move {
+                    ROOMS.lock().await.get_mut(&room_code).unwrap().as_mut().unwrap().state = GameState::NotStarted;
+                });
+
+                user.send_reliable_packet(
+                    JoinedGamePacket {
+                        room: map.get(&code).unwrap().as_ref().unwrap().to_owned(),
+                        user: map.get(&code).unwrap().as_ref().unwrap().to_owned().players.get(&room.host).as_ref().unwrap().as_ref().unwrap().to_owned(),
+                    },
+                    socket,
+                );
+                println!("WAITING FOR HOST LIST: {:?}", room.waiting_for_host.len());
+                let mut mut_room = map.get_mut(&code).unwrap().as_mut().unwrap();
+                for x in &mut_room.waiting_for_host {
+                    let mut other = mut_room.players.get(x).as_ref().unwrap().as_ref().unwrap().to_owned();
+                    println!("WRITING THIS GUY: {:?}", other);
+                    other.serverNonce += 1;
+                    other.send_reliable_packet(
+                        JoinedGamePacket {
+                            room: mut_room.to_owned(),
+                            user: other.to_owned(),
+                        },
+                        socket,
+                    );
+                }
+                mut_room.waiting_for_host.clear();
+            } else {
+                let mut packet = self.clone();
+                packet.host = Some(room_clone.as_ref().unwrap().host);
+                packet.joining = user_option.clone();
+                packet.room = room_clone.clone();
+                room_clone.as_ref().unwrap().send_reliable_to_all_but(
+                    packet,
+                    socket,
+                    &[player_option.as_ref().unwrap().id],
+                );
+                let pckt = Some(WaitingForHostPacket {
+                    code: Some(code.clone()),
+                    client: player_option.as_ref().unwrap().id
+                });
+                user.send_reliable_packet(
+                    pckt.as_ref().unwrap().to_owned(),
+                    socket,
+                );
+                pckt.as_ref().unwrap().to_owned().process(user, socket);
+            }
+        } else if room.state == NotStarted {
+            if !newRoom {
+                let mut packet = self.clone();
+                packet.host = Some(room_clone.as_ref().unwrap().host);
+                packet.joining = user_option.clone();
+                packet.room = room_clone.clone();
+                println!("new room: {:?}", room_clone);
+                room_clone.as_ref().unwrap().send_reliable_to_all_but(
+                    packet,
+                    socket,
+                    &[player_option.as_ref().unwrap().id],
+                );
+            }
+            user.send_reliable_packet(
+                JoinedGamePacket {
+                    room: map.get(&code).unwrap().as_ref().unwrap().to_owned(),
+                    user: user_option.as_ref().unwrap().to_owned(),
+                },
                 socket,
-                &[player_option.as_ref().unwrap().id],
             );
         }
-        user.send_reliable_packet(
-            JoinedGamePacket {
-                room: map.get(&code).unwrap().as_ref().unwrap().to_owned(),
-                user: user_option.as_ref().unwrap().to_owned(),
-            },
-            socket,
-        );
         let address = user.socketAddr;
-        tokio::spawn(async move {
-            let mut users = CONNECTIONS.lock().await;
-            let uzer = users.get_mut(&address).as_mut().unwrap().to_owned().unwrap();
-            if uzer.player != None {
-                let player = uzer.player.as_ref().unwrap().to_owned();
-                ROOMS.lock().await.get_mut(&code).unwrap().as_mut().unwrap().players.get_mut(&player.id).unwrap().as_mut().unwrap().serverNonce = uzer.serverNonce;
-            }
-        });
     }
 }
 
@@ -235,6 +317,7 @@ impl Packet for JoinedGamePacket {
         let mut hazel_message = HazelMessage::start_message(0x07);
         let room = self.room;
         hazel_message.buffer.write_i32_le(room.code.code_int);
+        println!("WRITING {:?}", self.user);
         hazel_message
             .buffer
             .write_i32_le(self.user.player.as_ref().unwrap().id);
@@ -365,9 +448,10 @@ impl Packet for GameDataPacket {
 
         // let addr = user.socketAddr;
         if packet.reliable {
-            room.as_mut().unwrap().send_reliable_to_all(
+            info!("ROOM ON GAME DATA PLAYER COUNT: {:?}", room.as_ref().unwrap().players.len());
+            room.as_mut().unwrap().send_reliable_to_all_but(
                 packet,
-                socket, /*, &[user.player.as_ref().unwrap().id]*/
+                socket,&[user.player.as_ref().unwrap().id]
             );
         } else {
             let mut buffer = Buffer {
@@ -523,25 +607,103 @@ impl Packet for StartGamePacket {
             return;
         }
 
+        let code = user.player.as_ref().unwrap().to_owned().game_code;
+
         let mut room = Some(get_rooms()
-            .get(&user.player.as_ref().unwrap().game_code)
+            .get(&code)
+            .as_mut()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .to_owned());
+
+        info!("start game process");
+        let packet = self.to_owned();
+        room.as_mut().unwrap().send_reliable_to_all(
+            packet,
+            socket
+        );
+        tokio::spawn(async move {
+            ROOMS.lock().await.get_mut(&code).unwrap().as_mut().unwrap().state = GameState::InProgress;
+        });
+    }
+}
+
+impl Packet for EndGamePacket {
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+        self.code = Some(GameCode::new_code_int(buffer.read_i32_le()));
+    }
+
+    fn serialize(self, buffer: &mut Buffer) {
+        let mut arr = self.buffer;
+        arr.position = 3;
+        buffer.write_u8_arr(&arr.array[arr.position..]);
+    }
+
+    fn process(self, user: &mut &User, socket: &UdpSocket) {
+        if !room_exists(self.code.as_ref().unwrap().to_owned()) {
+            info!("Room not found");
+            return;
+        }
+
+        if user.player == None {
+            error!("User for some reason lacks a player object!");
+            return;
+        }
+
+        let code = user.player.as_ref().unwrap().to_owned().game_code;
+
+        let mut room = Some(get_rooms()
+            .get(&code)
             .as_ref()
             .unwrap()
             .as_ref()
             .unwrap()
             .to_owned());
 
-        // info!("HELLO GAME DATA");
-
-        info!("game data to process");
-        // let addr = user.socketAddr;
+        info!("end game process");
         let packet = self.to_owned();
         room.as_mut().unwrap().send_reliable_to_all(
             packet,
             socket
         );
-        /*
-        let socketAddr = user.socketAddr;
-        // gameRoom.unwrap().unwrap().players.*/
+
+        tokio::spawn(async move {
+            ROOMS.lock().await.get_mut(&code).unwrap().as_mut().unwrap().state = GameState::WaitingForHost;
+        });
+    }
+}
+
+impl Packet for WaitingForHostPacket {
+    fn deserialize(&mut self, buffer: &mut Buffer) {
+        self.code = Some(GameCode::new_code_int(buffer.read_i32()));
+    }
+
+    fn serialize(self, buffer: &mut Buffer) {
+        let mut hazel_message = HazelMessage::start_message(12);
+        hazel_message.buffer.write_i32_le(self.code.as_ref().unwrap().code_int);
+        hazel_message.buffer.write_i32_le(self.client);
+        hazel_message.end_message();
+        hazel_message.copy_to(buffer);
+    }
+
+    fn process(self, user: &mut &User, socket: &UdpSocket) {
+        let code = self.code.as_ref().unwrap().to_owned();
+
+        let user = user.to_owned();
+
+        tokio::spawn(async move {
+            if !room_exists(self.code.as_ref().unwrap().to_owned()) {
+                info!("Room not found");
+                return;
+            }
+
+            if user.player == None {
+                error!("User for some reason lacks a player object!");
+                return;
+            }
+            let id = user.player.as_ref().unwrap().id;
+            ROOMS.lock().await.get_mut(&code).unwrap().as_mut().unwrap().waiting_for_host.push(id);
+        });
     }
 }

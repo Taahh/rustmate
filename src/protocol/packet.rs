@@ -1,6 +1,6 @@
 use crate::connections::update_user;
 use crate::inner::rooms::get_rooms;
-use crate::protocol::reliable_packets::{GameDataPacket, GameDataToPacket, HostGamePacket, JoinGamePacket, ReactorHandshakePacket, StartGamePacket};
+use crate::protocol::reliable_packets::{EndGamePacket, GameDataPacket, GameDataToPacket, HostGamePacket, JoinGamePacket, ReactorHandshakePacket, StartGamePacket};
 use crate::structs::structs::PlatformSpecificData;
 use crate::util::hazel::HazelMessage;
 use crate::{get_users, Buffer, User, CONNECTIONS};
@@ -131,6 +131,7 @@ impl Packet for ReliablePacket {
 
     fn process(self, user: &mut &User, socket: &UdpSocket) {
         user.send_ack(self.nonce, socket);
+        // /*let user = */get_users();
         info!(
             "Handling reliable packet {:?}",
             self.reliable_packet_id.unwrap()
@@ -177,6 +178,14 @@ impl Packet for ReliablePacket {
             };
             start_game.deserialize(&mut self.hazel_message.unwrap().buffer);
             start_game.process(user, socket);
+        } else if id == 8 {
+            info!("Reliable End Game Packet");
+            let mut end_game = EndGamePacket {
+                code: None,
+                buffer: self.hazel_message.as_ref().unwrap().to_owned().buffer,
+            };
+            end_game.deserialize(&mut self.hazel_message.unwrap().buffer);
+            end_game.process(user, socket);
         } else {
             info!("UNKNOWN RELIABLE ID {:?}", id);
         }
@@ -203,22 +212,7 @@ impl Packet for NormalPacket {
             self.reliable_packet_id.unwrap()
         );
         let id = self.reliable_packet_id.unwrap();
-        if id == 0 {
-            info!("Reliable Host Game Packet");
-            let mut packet = HostGamePacket { code: None };
-            packet.deserialize(&mut self.hazel_message.unwrap().buffer);
-            packet.process(user, socket);
-        } else if id == 1 {
-            info!("Reliable Join Game Packet");
-            let mut join_game = JoinGamePacket {
-                code: None,
-                joining: None,
-                host: None,
-                room: None,
-            };
-            join_game.deserialize(&mut self.hazel_message.unwrap().buffer);
-            join_game.process(user, socket);
-        } else if id == 5 {
+        if id == 5 {
             info!("Normal Game Data Packet");
             let mut game_data = GameDataPacket {
                 code: None,
