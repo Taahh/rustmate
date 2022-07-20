@@ -11,7 +11,6 @@ use tokio::net::UdpSocket;
 use tracing::info;
 use crate::inner::rooms::{room_exists, ROOMS};
 use crate::util::util::to_string;
-
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct User {
     pub state: UserState,

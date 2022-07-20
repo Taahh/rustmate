@@ -10,14 +10,23 @@ use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, MutexGuard};
 use tracing::info;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum GameState {
+    NotStarted,
+    WaitingForHost,
+    InProgress
+}
+
 #[derive(Debug, Clone)]
 pub struct GameRoom {
+    pub state: GameState,
     pub code: GameCode,
     pub players: HashMap<i32, Option<User>>,
     pub game_data: Option<GameData>,
     pub vote_ban_system: Option<VoteBanSystem>,
     pub lobby_behavior: Option<LobbyBehavior>,
     pub host: i32,
+    pub waiting_for_host: Vec<i32>
 }
 
 impl GameRoom {
@@ -25,12 +34,14 @@ impl GameRoom {
         let code_option = Some(code);
         let inside = code_option.as_ref();
         let room = Some(GameRoom {
+            state: GameState::NotStarted,
             code: inside.unwrap().clone(),
             players: HashMap::new(),
             game_data: None,
             vote_ban_system: None,
             lobby_behavior: None,
             host: -1,
+            waiting_for_host: Vec::new()
         });
         get_rooms().insert(code_option.unwrap(), room.to_owned());
         return room.unwrap();
